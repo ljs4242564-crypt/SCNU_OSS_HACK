@@ -8,7 +8,7 @@
 
 - **Production**: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com
 - **Health API**: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com/api/health
-- **GitHub**: GitHub 연결 승인 후 공개 저장소 URL 추가 예정
+- **GitHub**: https://github.com/ljs4242564-crypt/-SCNU_OSS-AI-
 
 ## 해결하려는 문제
 
