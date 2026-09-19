@@ -1,4 +1,6 @@
 import { Hono } from 'hono'
+import { formatRuleBasedAnswer } from '../services/answerFormatter'
+import { fetchAndVerifyCandidates } from '../services/pageFetcher'
 import { analyzeQuestion } from '../services/questionAnalyzer'
 import { searchOfficialSources } from '../services/searchService'
 import { normalizeQuestion } from '../utils/textNormalizer'
@@ -84,54 +86,21 @@ chatRoute.post('/chat', async (c) => {
 
   const analysis = analyzeQuestion(question)
   const search = await searchOfficialSources(analysis)
-  const searchStatusLabel = {
-    completed: '검색 후보 수집 완료',
-    partial: '일부 공식 출처 검색 완료',
-    skipped: '검색 실행 안 함',
-    failed: '공식 출처 검색 실패',
-  }[search.status]
-  const answer = analysis.supported
-    ? analysis.ambiguous
-      ? {
-          title: '질문의 분야를 하나로 좁혀주세요',
-          content: '서로 다른 분야의 키워드가 비슷한 수준으로 확인되었습니다. 한 번에 한 분야씩 질문하면 더 정확하게 검색할 수 있습니다.',
-          fields: [
-            { label: '우선 분류', value: analysis.categoryLabel },
-            { label: '다른 후보', value: analysis.alternatives.map((item) => item.categoryLabel).join(', ') || '없음' },
-            { label: '공식 검색', value: '모호한 질문으로 실행하지 않음' },
-          ],
-        }
-      : {
-          title: `${analysis.categoryLabel} 공식 검색 후보를 찾았습니다`,
-          content: search.candidates.length > 0
-            ? '국립순천대학교 공식 출처에서 관련 후보를 찾았습니다. 아직 상세 페이지 원문을 확인하기 전이므로 최종 답변으로 사용하지 않습니다.'
-            : '등록된 공식 출처에서 검색 후보를 찾지 못했습니다. 아직 상세 페이지 원문 확인은 실행하지 않았습니다.',
-          fields: [
-            { label: '분야', value: analysis.categoryLabel },
-            { label: '질문 목적', value: analysis.intentLabel },
-            { label: '검색 키워드', value: analysis.searchKeywords.join(' · ') },
-            { label: '적용 기준', value: `${analysis.context.year}학년도 ${analysis.context.semester}학기` },
-            { label: '검색 상태', value: searchStatusLabel },
-            { label: '검색 후보', value: `${search.candidates.length}건` },
-          ],
-        }
-    : {
-        title: '현재 지원 범위에서 분류하지 못했습니다',
-        content: '학사일정, 장학금, 도서관, 학생지원, 부서 연락처 중 하나를 포함해 다시 질문해 주세요.',
-        fields: [
-          { label: '지원 분야', value: '학사일정 · 장학금 · 도서관 · 학생지원 · 부서 연락처' },
-          { label: '공식 검색', value: '지원하지 않는 질문으로 실행하지 않음' },
-        ],
-      }
+  const documents = await fetchAndVerifyCandidates(search, analysis)
+  const formatted = formatRuleBasedAnswer(analysis, search, documents)
 
   const response: ChatSuccessResponse = {
     ok: true,
-    status: 'pending',
+    status: formatted.status,
     question,
     analysis,
     search,
-    answer,
-    sources: [],
+    answer: {
+      title: formatted.title,
+      content: formatted.content,
+      fields: formatted.fields,
+    },
+    sources: formatted.sources,
     meta: createRequestMeta(),
   }
 

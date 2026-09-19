@@ -18,7 +18,7 @@ describe('POST /chat', () => {
     expect(response.status).toBe(200)
     expect(body.ok).toBe(true)
     if (body.ok) {
-      expect(body.status).toBe('pending')
+      expect(['verified', 'not_found']).toContain(body.status)
       expect(body.analysis.category).toBe('library')
       expect(body.analysis.intent).toBe('hours')
       expect(body.sources).toEqual([])

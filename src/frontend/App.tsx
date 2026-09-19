@@ -1,9 +1,11 @@
 import { FormEvent, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  CircleX,
   Clock3,
   ExternalLink,
   GraduationCap,
@@ -160,6 +162,14 @@ function SearchPanel() {
     }
   }
 
+  const resultStatus = result ? {
+    verified: { label: '공식 홈페이지에서 확인됨', icon: CheckCircle2 },
+    conflicting: { label: '서로 다른 공식 자료가 확인됨', icon: AlertTriangle },
+    not_found: { label: '공식 홈페이지에서 확인하지 못함', icon: CircleX },
+    pending: { label: '공식 자료 확인 중', icon: Sparkles },
+  }[result.status] : null
+  const ResultStatusIcon = resultStatus?.icon
+
   return (
     <>
       <section className="quick-section" aria-labelledby="quick-heading">
@@ -232,10 +242,11 @@ function SearchPanel() {
           </div>
         </div>
 
-        {result && (
-          <div className="phase-notice" role="status">
-            <Sparkles size={20} aria-hidden="true" />
+        {result && resultStatus && ResultStatusIcon && (
+          <article className={`phase-notice result-${result.status}`} role="status">
+            <ResultStatusIcon size={20} aria-hidden="true" />
             <div>
+              <span className="result-status-label">{resultStatus.label}</span>
               <strong>{result.answer.title}</strong>
               <p>{result.answer.content}</p>
               <ul className="api-result-fields">
@@ -267,12 +278,23 @@ function SearchPanel() {
                   <p>후보 제목만 수집한 상태입니다. 다음 단계에서 상세 원문을 검증합니다.</p>
                 </div>
               )}
+              {result.sources.length > 0 && (
+                <div className="verified-sources">
+                  <strong>확인한 공식 출처</strong>
+                  {result.sources.map((source) => (
+                    <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">
+                      <span>{source.title}</span>
+                      <ExternalLink size={14} aria-hidden="true" />
+                    </a>
+                  ))}
+                </div>
+              )}
               {result.search.failedSources.length > 0 && (
                 <p className="partial-search-note">일부 공식 출처는 일시적으로 확인하지 못했습니다.</p>
               )}
               <small>요청 번호: {result.meta.requestId}</small>
             </div>
-          </div>
+          </article>
         )}
       </section>
     </>
@@ -382,7 +404,6 @@ function App() {
 
         <div className="page-shell content-shell">
           <SearchPanel />
-          <ResultPreview />
         </div>
       </main>
 

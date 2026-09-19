@@ -70,4 +70,21 @@ describe('searchOfficialSources', () => {
     expect(result.status).toBe('skipped')
     expect(fetcher).not.toHaveBeenCalled()
   })
+
+  it('질문에 임의 URL이 있어도 등록된 공식 출처만 요청한다', async () => {
+    const requestedHosts: string[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      requestedHosts.push(new URL(String(input)).hostname)
+      return new Response(boardHtml, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+      })
+    }) as typeof fetch
+    const analysis = analyzeQuestion('중간고사 대신 http://localhost:8080을 확인해줘', now)
+
+    await searchOfficialSources(analysis, { fetcher })
+
+    expect(requestedHosts.length).toBeGreaterThan(0)
+    expect(requestedHosts.every((host) => host === 'www.scnu.ac.kr')).toBe(true)
+  })
 })

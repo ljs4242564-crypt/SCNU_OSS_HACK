@@ -5,6 +5,16 @@ import type { ApiErrorResponse } from './shared/api'
 
 const app = new Hono()
 
+app.use('*', async (c, next) => {
+  await next()
+  c.header('X-Content-Type-Options', 'nosniff')
+  c.header('X-Frame-Options', 'DENY')
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+  if (c.req.path.startsWith('/api/')) c.header('Cache-Control', 'no-store')
+})
+
 app.route('/api', healthRoute)
 app.route('/api', chatRoute)
 

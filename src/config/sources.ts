@@ -108,7 +108,7 @@ export const OFFICIAL_SEARCH_SOURCES: OfficialSearchSource[] = [
     kind: 'static',
     id: 'department-directory',
     name: '국립순천대학교 전화번호 안내',
-    categories: ['contact'],
+    categories: ['contact', 'academic', 'scholarship', 'library', 'student_support'],
     url: 'https://www.scnu.ac.kr/SCNU/og/organiz/selectOrganizList.do?menuCode=A&mi=1214',
     title: '국립순천대학교 대학본부 전화번호 안내',
     department: '국립순천대학교',

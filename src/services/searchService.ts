@@ -6,9 +6,8 @@ import {
   type SearchableCategory,
 } from '../config/sources'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
+import { validateOfficialUrl, safeFetchOfficial } from '../utils/domainValidator'
 import { parseScnuBoardList, type ParsedBoardItem } from './boardParser'
-
-const OFFICIAL_HOSTS = new Set(['www.scnu.ac.kr', 'library.scnu.ac.kr'])
 
 type SearchDependencies = {
   fetcher?: typeof fetch
@@ -18,23 +17,11 @@ function includesKeyword(value: string, keyword: string) {
   return value.toLocaleLowerCase('ko-KR').includes(keyword.toLocaleLowerCase('ko-KR'))
 }
 
-function isRegistryUrlSafe(rawUrl: string) {
-  try {
-    const url = new URL(rawUrl)
-    return url.protocol === 'https:'
-      && url.port === ''
-      && url.username === ''
-      && url.password === ''
-      && OFFICIAL_HOSTS.has(url.hostname)
-  } catch {
-    return false
-  }
-}
-
 function selectSources(analysis: QuestionAnalysis) {
   const category = analysis.category as SearchableCategory
   const categorySources = OFFICIAL_SEARCH_SOURCES
     .filter((source) => source.categories.includes(category))
+    .filter((source) => source.id !== 'department-directory' || analysis.intent === 'contact')
     .sort((left, right) => right.priority - left.priority)
 
   const triggered = categorySources.filter(
@@ -110,7 +97,7 @@ async function fetchBoard(
   searchTerm: string,
   fetcher: typeof fetch,
 ): Promise<ParsedBoardItem[]> {
-  if (!isRegistryUrlSafe(source.url)) {
+  if (!validateOfficialUrl(source.url).valid) {
     throw new Error('등록된 공식 출처 URL이 안전하지 않습니다.')
   }
 
@@ -121,11 +108,7 @@ async function fetchBoard(
   requestUrl.searchParams.set('searchType', 'all')
   requestUrl.searchParams.set('searchValue', searchTerm)
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), SEARCH_LIMITS.timeoutMs)
-
-  try {
-    const response = await fetcher(requestUrl, {
+  const { response, finalUrl } = await safeFetchOfficial(requestUrl, {
       method: 'GET',
       headers: {
         Accept: 'text/html,application/xhtml+xml',
@@ -133,31 +116,23 @@ async function fetchBoard(
         Referer: `${source.url}?bbsId=${source.boardId}&mi=${source.menuId}`,
         'User-Agent': 'Mozilla/5.0 (compatible; SCNUCampusAssistant/0.5; +https://www.scnu.ac.kr/)',
       },
-      redirect: 'manual',
-      signal: controller.signal,
-    })
+    }, fetcher)
 
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error('공식 게시판이 예상하지 않은 주소로 이동했습니다.')
-    }
-    if (!response.ok) {
-      throw new Error(`공식 게시판 응답 오류(${response.status})`)
-    }
-
-    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-    if (!contentType.includes('text/html')) {
-      throw new Error('공식 게시판이 HTML 문서를 반환하지 않았습니다.')
-    }
-
-    const html = await response.text()
-    if (html.length > SEARCH_LIMITS.maxHtmlCharacters) {
-      throw new Error('공식 게시판 응답이 허용된 크기를 초과했습니다.')
-    }
-
-    return parseScnuBoardList(html, requestUrl.toString(), source.name)
-  } finally {
-    clearTimeout(timeout)
+  if (!response.ok) {
+    throw new Error(`공식 게시판 응답 오류(${response.status})`)
   }
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+  if (!contentType.includes('text/html')) {
+    throw new Error('공식 게시판이 HTML 문서를 반환하지 않았습니다.')
+  }
+
+  const html = await response.text()
+  if (html.length > SEARCH_LIMITS.maxHtmlCharacters) {
+    throw new Error('공식 게시판 응답이 허용된 크기를 초과했습니다.')
+  }
+
+  return parseScnuBoardList(html, finalUrl.toString(), source.name)
 }
 
 export async function searchOfficialSources(
@@ -190,7 +165,7 @@ export async function searchOfficialSources(
 
   const results = await Promise.allSettled(
     selectedSources.map(async (source) => {
-      if (!isRegistryUrlSafe(source.url)) {
+      if (!validateOfficialUrl(source.url).valid) {
         throw new Error('등록된 출처가 공식 호스트 검사를 통과하지 못했습니다.')
       }
 
