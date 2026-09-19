@@ -1,4 +1,6 @@
 import { Hono } from 'hono'
+import { analyzeQuestion } from '../services/questionAnalyzer'
+import { normalizeQuestion } from '../utils/textNormalizer'
 import {
   CHAT_QUESTION_MAX_LENGTH,
   CHAT_QUESTION_MIN_LENGTH,
@@ -17,14 +19,6 @@ function createRequestMeta() {
     requestId: crypto.randomUUID(),
     processedAt: new Date().toISOString(),
   }
-}
-
-function normalizeQuestion(value: string) {
-  return value
-    .normalize('NFC')
-    .replace(/[\u0000-\u001F\u007F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function errorResponse(code: ApiErrorCode, message: string): ApiErrorResponse {
@@ -87,18 +81,43 @@ chatRoute.post('/chat', async (c) => {
     )
   }
 
+  const analysis = analyzeQuestion(question)
+  const answer = analysis.supported
+    ? analysis.ambiguous
+      ? {
+          title: '질문의 분야를 하나로 좁혀주세요',
+          content: '서로 다른 분야의 키워드가 비슷한 수준으로 확인되었습니다. 한 번에 한 분야씩 질문하면 더 정확하게 검색할 수 있습니다.',
+          fields: [
+            { label: '우선 분류', value: analysis.categoryLabel },
+            { label: '다른 후보', value: analysis.alternatives.map((item) => item.categoryLabel).join(', ') || '없음' },
+            { label: '공식 검색', value: '모호한 질문으로 실행하지 않음' },
+          ],
+        }
+      : {
+          title: `${analysis.categoryLabel} 질문으로 분석했습니다`,
+          content: '규칙 기반 질문 분석이 완료되었습니다. 공식 사이트 검색과 원문 확인은 다음 단계에서 연결합니다.',
+          fields: [
+            { label: '분야', value: analysis.categoryLabel },
+            { label: '질문 목적', value: analysis.intentLabel },
+            { label: '검색 키워드', value: analysis.searchKeywords.join(' · ') },
+            { label: '적용 기준', value: `${analysis.context.year}학년도 ${analysis.context.semester}학기` },
+          ],
+        }
+    : {
+        title: '현재 지원 범위에서 분류하지 못했습니다',
+        content: '학사일정, 장학금, 도서관, 학생지원, 부서 연락처 중 하나를 포함해 다시 질문해 주세요.',
+        fields: [
+          { label: '지원 분야', value: '학사일정 · 장학금 · 도서관 · 학생지원 · 부서 연락처' },
+          { label: '공식 검색', value: '지원하지 않는 질문으로 실행하지 않음' },
+        ],
+      }
+
   const response: ChatSuccessResponse = {
     ok: true,
     status: 'pending',
     question,
-    answer: {
-      title: '질문이 안전하게 접수되었습니다',
-      content: '현재는 API 입력 검증 단계입니다. 다음 단계에서 규칙 기반 질문 분류와 공식 사이트 검색을 연결합니다.',
-      fields: [
-        { label: '처리 상태', value: 'API 연결 및 입력 검증 완료' },
-        { label: '공식 검색', value: '아직 실행하지 않음' },
-      ],
-    },
+    analysis,
+    answer,
     sources: [],
     meta: createRequestMeta(),
   }

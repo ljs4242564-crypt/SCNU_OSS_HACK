@@ -3,6 +3,46 @@ export const CHAT_QUESTION_MIN_LENGTH = 2
 
 export type ChatStatus = 'pending' | 'verified' | 'conflicting' | 'not_found'
 
+export type QuestionCategory =
+  | 'academic'
+  | 'scholarship'
+  | 'library'
+  | 'student_support'
+  | 'contact'
+  | 'unknown'
+
+export type QuestionIntent =
+  | 'schedule'
+  | 'application'
+  | 'hours'
+  | 'contact'
+  | 'procedure'
+  | 'location'
+  | 'general'
+
+export type QuestionAnalysis = {
+  category: QuestionCategory
+  categoryLabel: string
+  intent: QuestionIntent
+  intentLabel: string
+  confidence: 'high' | 'medium' | 'low'
+  supported: boolean
+  ambiguous: boolean
+  matchedKeywords: string[]
+  searchKeywords: string[]
+  alternatives: Array<{
+    category: Exclude<QuestionCategory, 'unknown'>
+    categoryLabel: string
+    score: number
+  }>
+  context: {
+    year: number
+    semester: 1 | 2
+    yearWasExplicit: boolean
+    semesterWasExplicit: boolean
+  }
+}
+
 export type ChatRequest = {
   question: string
 }
@@ -24,6 +64,7 @@ export type ChatSuccessResponse = {
   ok: true
   status: ChatStatus
   question: string
+  analysis: QuestionAnalysis
   answer: {
     title: string
     content: string
