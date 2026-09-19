@@ -14,7 +14,7 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 
 ## 현재 개발 상태
 
-**Phase 4 — 규칙 기반 질문 분류 및 키워드 시스템 완료**
+**Phase 5 — 국립순천대학교 공식 사이트 검색 후보 수집 완료**
 
 ### 현재 완료된 기능
 
@@ -47,14 +47,23 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 - 현재 연도·학기 및 명시적 연도·학기 해석
 - 공식 사이트 검색어 후보 생성
 - 모호한 질문 및 지원 범위 밖 질문 처리
-- Vitest 기반 질문 분석 및 API 회귀 테스트 15개
+- Vitest 기반 질문 분석 및 API 회귀 테스트
+- 카테고리별 공식 출처 레지스트리
+- 국립순천대학교 학사·장학·일반 공지 게시판 검색
+- 도서관·전화번호 안내 공식 페이지 후보 제공
+- 공식 게시판 HTML 목록 파싱
+- 후보 제목·URL·작성부서·게시일 수집
+- 키워드·적용 연도·학기 기반 후보 점수화
+- 오래된 자료 및 OCU·학점교류 등 특수 자료 감점
+- 출처·검색어·후보 수·응답 크기·시간 제한
+- React에서 원문 확인 전 검색 후보 표시
+- Vitest 테스트 총 21개
 
-현재 API는 질문을 분석해 분야, 목적, 검색 키워드를 반환합니다. 실제 학교 검색은 아직 실행하지 않습니다.
+현재 API는 공식 사이트에서 검색 후보를 수집합니다. 후보 상세 페이지의 실제 본문 검증은 아직 실행하지 않습니다.
 
 ### 아직 구현하지 않은 기능
 
-- 공식 사이트 검색
-- Domain Allowlist 검증
+- 중앙화된 Domain Allowlist 및 redirect 검증
 - 공식 페이지 Fetch 및 본문 추출
 - 날짜, 기간, 시간, 전화번호 추출
 - 최신성 및 충돌 판단
@@ -72,7 +81,7 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 | GET | `/static/client.js` | 빌드된 React 클라이언트 |
 | GET | `/static/client.css` | 빌드된 스타일시트 |
 
-`POST /api/chat`은 질문 분석 결과를 `analysis` 필드에 담아 반환합니다. 공식 자료를 아직 검색하지 않으므로 상태는 `pending`입니다.
+`POST /api/chat`은 질문 분석 결과를 `analysis`, 공식 검색 후보를 `search` 필드에 담아 반환합니다. 상세 페이지 원문 검증 전이므로 전체 상태는 아직 `pending`입니다.
 
 ## 기술 스택
 
@@ -83,6 +92,7 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 - TypeScript
 - Tailwind CSS
 - Lucide React
+- htmlparser2
 
 ### Backend 및 배포 기반
 
@@ -102,12 +112,15 @@ src/
 ├── index.tsx                    # Hono 진입점, API 연결, React HTML 셸
 ├── renderer.tsx                 # 초기 Hono 템플릿 렌더러(현재 미사용)
 ├── config/
-│   └── keywords.ts              # 카테고리·의도 키워드 규칙
+│   ├── keywords.ts              # 카테고리·의도 키워드 규칙
+│   └── sources.ts               # 공식 검색 출처와 요청 제한
 ├── routes/
 │   ├── chat.ts                  # 질문 검증, 분석, 임시 응답
 │   └── health.ts                # API 상태 확인
 ├── services/
-│   └── questionAnalyzer.ts      # 점수 기반 질문 분석기
+│   ├── questionAnalyzer.ts      # 점수 기반 질문 분석기
+│   ├── searchService.ts         # 공식 게시판 검색과 후보 점수화
+│   └── boardParser.ts           # 게시판 목록 HTML 파서
 ├── shared/
 │   └── api.ts                   # 프론트엔드·백엔드 공통 API 타입
 ├── utils/
@@ -125,7 +138,9 @@ vite.config.ts                   # React 클라이언트와 Worker 이중 빌드
 wrangler.jsonc                   # Cloudflare Pages 설정
 tests/
 ├── questionAnalyzer.test.ts     # 질문 분석 단위 테스트
-└── chatRoute.test.ts            # 채팅 API 회귀 테스트
+├── chatRoute.test.ts            # 채팅 API 회귀 테스트
+├── searchService.test.ts        # 검색 서비스 테스트
+└── boardParser.test.ts          # 게시판 HTML 파서 테스트
 ```
 
 백엔드 기능을 구현하면서 `routes`, `services`, `config`, `utils`, `types`, `tests` 디렉터리를 필요한 시점에 추가합니다.
@@ -177,8 +192,9 @@ npx tsc --noEmit
 3. `공식 정보 찾기` 버튼을 누릅니다.
 4. React가 질문을 `POST /api/chat`으로 전송합니다.
 5. Hono가 입력을 검증하고 분야·질문 목적·검색 키워드를 분석합니다.
-6. 분석 결과가 화면에 표시됩니다.
-7. 향후 검색 기능 연결 후 공식 확인 상태, 답변, 담당 부서, 게시일, 확인일, 공식 URL을 표시합니다.
+6. 등록된 국립순천대학교 공식 게시판 또는 페이지에서 후보를 수집합니다.
+7. 후보 제목, 작성부서, 게시일, 공식 URL이 화면에 표시됩니다.
+8. 후보는 아직 원문 확인 전 자료이며 최종 답변으로 표시하지 않습니다.
 
 ## 공식 사이트 검색 원칙
 
@@ -227,7 +243,9 @@ npx tsc --noEmit
 
 ## 알려진 한계
 
-- Hono API와 질문 분석기는 연결됐지만 실제 공식 사이트 검색은 아직 구현되지 않았습니다.
+- 공식 검색 후보는 수집하지만 상세 페이지 본문은 아직 확인하지 않습니다.
+- 도서관은 Angular 기반 사이트여서 현재 공식 메인 안내 페이지를 후보로 제공합니다.
+- 전화번호는 조직도 메인 페이지를 후보로 제공하며 부서별 연락처 추출은 이후 단계입니다.
 - 규칙 사전에 없는 표현은 지원 분야라도 분류하지 못할 수 있습니다.
 - 두 분야의 점수가 비슷하면 검색하지 않고 질문을 좁혀 달라고 안내합니다.
 - `/api/chat`의 `pending` 답변은 분석 결과이며 학교 정보가 아닙니다.
@@ -237,15 +255,16 @@ npx tsc --noEmit
 
 ## 다음 개발 단계
 
-Phase 5에서 다음을 구현합니다.
+Phase 6에서 다음을 구현합니다.
 
-- 카테고리별 국립순천대학교 공식 출처 레지스트리
-- 학사·장학·도서관·학생지원·연락처 검색 대상 정의
-- 공식 게시판 목록 검색 어댑터
-- 분석된 검색 키워드로 후보 자료 탐색
-- 후보 제목·URL·작성부서·게시일 수집
-- 검색 후보 개수 및 요청 시간 제한
-- Phase 6 URL 검증 전까지 임의 URL Fetch 금지
+- 중앙화된 Domain Allowlist
+- HTTPS, hostname, port, credential 검증
+- localhost·IP 주소·내부 주소 차단
+- 허용된 공식 경로 패턴 검사
+- redirect 단계별 URL 재검증
+- 검색 출처와 후보 URL에 동일한 검증 함수 적용
+- SSRF 우회 입력 단위 테스트
+- 사용자 입력 URL을 절대로 Fetch하지 않는지 회귀 테스트
 
 ## 라이선스 제안
 

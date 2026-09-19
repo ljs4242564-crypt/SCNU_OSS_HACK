@@ -246,6 +246,30 @@ function SearchPanel() {
                   </li>
                 ))}
               </ul>
+              {result.search.candidates.length > 0 && (
+                <div className="candidate-area">
+                  <strong>원문 확인 전 검색 후보</strong>
+                  <ul className="search-candidate-list">
+                    {result.search.candidates.map((candidate) => (
+                      <li key={candidate.url}>
+                        <a href={candidate.url} target="_blank" rel="noopener noreferrer">
+                          <span>{candidate.title}</span>
+                          <ExternalLink size={14} aria-hidden="true" />
+                        </a>
+                        <small>
+                          {candidate.sourceName}
+                          {candidate.department ? ` · ${candidate.department}` : ''}
+                          {candidate.publishedAt ? ` · ${candidate.publishedAt}` : ''}
+                        </small>
+                      </li>
+                    ))}
+                  </ul>
+                  <p>후보 제목만 수집한 상태입니다. 다음 단계에서 상세 원문을 검증합니다.</p>
+                </div>
+              )}
+              {result.search.failedSources.length > 0 && (
+                <p className="partial-search-note">일부 공식 출처는 일시적으로 확인하지 못했습니다.</p>
+              )}
               <small>요청 번호: {result.meta.requestId}</small>
             </div>
           </div>

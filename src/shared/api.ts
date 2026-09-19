@@ -60,11 +60,33 @@ export type AnswerSource = {
   checkedAt: string
 }
 
+export type SearchCandidate = {
+  sourceId: string
+  sourceName: string
+  title: string
+  department: string | null
+  url: string
+  publishedAt: string | null
+  relevanceScore: number
+  matchedKeywords: string[]
+}
+
+export type SearchReport = {
+  status: 'completed' | 'partial' | 'skipped' | 'failed'
+  queriedSources: string[]
+  failedSources: Array<{
+    sourceId: string
+    reason: string
+  }>
+  candidates: SearchCandidate[]
+}
+
 export type ChatSuccessResponse = {
   ok: true
   status: ChatStatus
   question: string
   analysis: QuestionAnalysis
+  search: SearchReport
   answer: {
     title: string
     content: string

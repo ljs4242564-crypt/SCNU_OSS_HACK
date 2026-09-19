@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { analyzeQuestion } from '../services/questionAnalyzer'
+import { searchOfficialSources } from '../services/searchService'
 import { normalizeQuestion } from '../utils/textNormalizer'
 import {
   CHAT_QUESTION_MAX_LENGTH,
@@ -82,6 +83,13 @@ chatRoute.post('/chat', async (c) => {
   }
 
   const analysis = analyzeQuestion(question)
+  const search = await searchOfficialSources(analysis)
+  const searchStatusLabel = {
+    completed: '검색 후보 수집 완료',
+    partial: '일부 공식 출처 검색 완료',
+    skipped: '검색 실행 안 함',
+    failed: '공식 출처 검색 실패',
+  }[search.status]
   const answer = analysis.supported
     ? analysis.ambiguous
       ? {
@@ -94,13 +102,17 @@ chatRoute.post('/chat', async (c) => {
           ],
         }
       : {
-          title: `${analysis.categoryLabel} 질문으로 분석했습니다`,
-          content: '규칙 기반 질문 분석이 완료되었습니다. 공식 사이트 검색과 원문 확인은 다음 단계에서 연결합니다.',
+          title: `${analysis.categoryLabel} 공식 검색 후보를 찾았습니다`,
+          content: search.candidates.length > 0
+            ? '국립순천대학교 공식 출처에서 관련 후보를 찾았습니다. 아직 상세 페이지 원문을 확인하기 전이므로 최종 답변으로 사용하지 않습니다.'
+            : '등록된 공식 출처에서 검색 후보를 찾지 못했습니다. 아직 상세 페이지 원문 확인은 실행하지 않았습니다.',
           fields: [
             { label: '분야', value: analysis.categoryLabel },
             { label: '질문 목적', value: analysis.intentLabel },
             { label: '검색 키워드', value: analysis.searchKeywords.join(' · ') },
             { label: '적용 기준', value: `${analysis.context.year}학년도 ${analysis.context.semester}학기` },
+            { label: '검색 상태', value: searchStatusLabel },
+            { label: '검색 후보', value: `${search.candidates.length}건` },
           ],
         }
     : {
@@ -117,6 +129,7 @@ chatRoute.post('/chat', async (c) => {
     status: 'pending',
     question,
     analysis,
+    search,
     answer,
     sources: [],
     meta: createRequestMeta(),
