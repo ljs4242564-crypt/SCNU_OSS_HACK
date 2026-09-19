@@ -14,7 +14,7 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 
 ## 현재 개발 상태
 
-**Phase 2 — React UI 구현 완료**
+**Phase 3 — Hono 기본 API 및 React 연결 완료**
 
 ### 현재 완료된 기능
 
@@ -33,13 +33,18 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 - 검색 결과 카드 미리보기
 - 키보드 포커스 및 스크린 리더용 레이블
 - Hono가 React 앱 셸과 정적 Assets 제공
+- `GET /api/health` 서비스 상태 확인
+- `POST /api/chat` 질문 접수 및 서버 입력 검증
+- JSON 형식, Content-Type, 요청 크기, 질문 타입 및 길이 검증
+- 공통 API 요청·응답 TypeScript 타입
+- 일관된 JSON 오류 응답과 요청 식별자
+- React 질문 폼과 Hono API 연결
+- API 요청 중 로딩 및 네트워크 오류 표시
 
-현재 질문 제출은 UI 동작 확인용입니다. 실제 학교 검색 API는 아직 연결되지 않았습니다.
+현재 API는 질문을 안전하게 접수하고 검증하는 단계입니다. 실제 학교 검색은 아직 실행하지 않습니다.
 
 ### 아직 구현하지 않은 기능
 
-- `POST /api/chat`
-- `GET /api/health`
 - 규칙 기반 질문 분류
 - 공식 사이트 검색
 - Domain Allowlist 검증
@@ -55,10 +60,12 @@ SCNU Campus Assistant는 공식 출처 확인, 원문 검토, 구조화된 결�
 | Method | Path | 설명 |
 |---|---|---|
 | GET | `/` | React 기반 메인 화면 |
+| GET | `/api/health` | API 상태, 버전, 서버 시각 확인 |
+| POST | `/api/chat` | `{ "question": "질문" }` 접수 및 검증 |
 | GET | `/static/client.js` | 빌드된 React 클라이언트 |
 | GET | `/static/client.css` | 빌드된 스타일시트 |
 
-API 경로는 Phase 3에서 추가합니다.
+`POST /api/chat`은 현재 `pending` 상태의 임시 응답을 반환하며, Phase 4부터 질문 분류 결과가 추가됩니다.
 
 ## 기술 스택
 
@@ -85,11 +92,18 @@ API 경로는 Phase 3에서 추가합니다.
 
 ```text
 src/
-├── index.tsx                    # Hono 진입점과 React HTML 셸
+├── index.tsx                    # Hono 진입점, API 연결, React HTML 셸
 ├── renderer.tsx                 # 초기 Hono 템플릿 렌더러(현재 미사용)
+├── routes/
+│   ├── chat.ts                  # 질문 요청 검증과 임시 응답
+│   └── health.ts                # API 상태 확인
+├── shared/
+│   └── api.ts                   # 프론트엔드·백엔드 공통 API 타입
 └── frontend/
     ├── main.tsx                 # React 마운트 지점
-    ├── App.tsx                  # 메인 화면과 UI 상태
+    ├── App.tsx                  # 메인 화면과 API 요청 상태
+    ├── lib/
+    │   └── api.ts               # Hono API 호출과 오류 변환
     └── styles/
         └── index.css            # Tailwind 및 반응형 디자인
 
@@ -144,8 +158,9 @@ npx tsc --noEmit
 1. 메인 화면에서 학사일정, 장학금 등 빠른 질문 분야를 선택합니다.
 2. 자동 입력된 질문을 수정하거나 직접 질문을 입력합니다.
 3. `공식 정보 찾기` 버튼을 누릅니다.
-4. 현재 Phase 2에서는 입력 UI가 정상 동작했다는 안내만 표시됩니다.
-5. 향후 API 연결 후 공식 확인 상태, 답변, 담당 부서, 게시일, 확인일, 공식 URL을 표시합니다.
+4. React가 질문을 `POST /api/chat`으로 전송합니다.
+5. Hono가 입력을 검증하고 현재 개발 상태를 응답합니다.
+6. 향후 검색 기능 연결 후 공식 확인 상태, 답변, 담당 부서, 게시일, 확인일, 공식 URL을 표시합니다.
 
 ## 공식 사이트 검색 원칙
 
@@ -194,22 +209,24 @@ npx tsc --noEmit
 
 ## 알려진 한계
 
-- 실제 Hono 검색 API가 아직 연결되지 않았습니다.
-- 결과 카드는 UI 구조 확인용 예시입니다.
+- Hono API는 연결됐지만 실제 공식 사이트 검색은 아직 구현되지 않았습니다.
+- `/api/chat`의 `pending` 답변은 개발 단계 안내이며 학교 정보가 아닙니다.
+- 결과 미리보기 카드는 UI 구조 확인용 예시입니다.
 - PDF, HWP, 이미지 첨부파일 내용은 MVP에서 자동 추출하지 않을 수 있습니다.
 - 규칙 사전에 없는 표현은 분류하지 못할 수 있습니다.
 - 학교 사이트 HTML 구조가 변경되면 추출 규칙 수정이 필요합니다.
 
 ## 다음 개발 단계
 
-Phase 3에서 다음을 구현합니다.
+Phase 4에서 다음을 구현합니다.
 
-- Hono API 라우팅 구조
-- `GET /api/health`
-- `POST /api/chat`
-- 요청 및 응답 TypeScript 타입
-- 입력 검증
-- 아직 검색 전인 안전한 임시 응답
+- 질문 문자열 정규화 규칙 확장
+- 5개 MVP 분야 키워드 사전
+- 점수 기반 카테고리 분류
+- 질문 의도 분류
+- 검색어 후보 생성
+- 모호하거나 지원하지 않는 질문 처리
+- 질문 분석 단위 테스트
 
 ## 라이선스 제안
 

@@ -1,6 +1,50 @@
 import { Hono } from 'hono'
+import { chatRoute } from './routes/chat'
+import { healthRoute } from './routes/health'
+import type { ApiErrorResponse } from './shared/api'
 
 const app = new Hono()
+
+app.route('/api', healthRoute)
+app.route('/api', chatRoute)
+
+app.all('/api/*', (c) => {
+  const response: ApiErrorResponse = {
+    ok: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: '요청한 API 경로를 찾을 수 없습니다.',
+    },
+    meta: {
+      requestId: crypto.randomUUID(),
+      processedAt: new Date().toISOString(),
+    },
+  }
+
+  return c.json(response, 404)
+})
+
+app.onError((error, c) => {
+  console.error('Unhandled API error', error)
+
+  if (c.req.path.startsWith('/api/')) {
+    const response: ApiErrorResponse = {
+      ok: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: '요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+      },
+      meta: {
+        requestId: crypto.randomUUID(),
+        processedAt: new Date().toISOString(),
+      },
+    }
+
+    return c.json(response, 500)
+  }
+
+  return c.text('Internal Server Error', 500)
+})
 
 app.get('*', (c) => {
   const clientScript = import.meta.env.PROD

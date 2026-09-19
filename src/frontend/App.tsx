@@ -10,6 +10,7 @@ import {
   Headphones,
   Landmark,
   Library,
+  LoaderCircle,
   Menu,
   Phone,
   Search,
@@ -18,6 +19,8 @@ import {
   Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { CampusApiError, submitCampusQuestion } from './lib/api'
+import type { ChatSuccessResponse } from '../shared/api'
 
 type QuickQuestion = {
   label: string
@@ -117,18 +120,20 @@ function QuickQuestionCard({ item, onSelect }: { item: QuickQuestion; onSelect: 
 
 function SearchPanel() {
   const [question, setQuestion] = useState('')
-  const [submittedQuestion, setSubmittedQuestion] = useState('')
+  const [result, setResult] = useState<ChatSuccessResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
   const remaining = useMemo(() => 160 - question.length, [question])
 
   const selectQuestion = (value: string) => {
     setQuestion(value)
+    setResult(null)
     setError('')
     document.getElementById('campus-question')?.focus()
   }
 
-  const submitQuestion = (event: FormEvent<HTMLFormElement>) => {
+  const submitQuestion = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const normalized = question.trim().replace(/\s+/g, ' ')
 
@@ -138,7 +143,21 @@ function SearchPanel() {
     }
 
     setError('')
-    setSubmittedQuestion(normalized)
+    setResult(null)
+    setIsLoading(true)
+
+    try {
+      const response = await submitCampusQuestion(normalized)
+      setQuestion(response.question)
+      setResult(response)
+    } catch (caughtError) {
+      const message = caughtError instanceof CampusApiError
+        ? caughtError.message
+        : '질문을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -181,15 +200,17 @@ function SearchPanel() {
               rows={2}
               onChange={(event) => {
                 setQuestion(event.target.value)
+                setResult(null)
                 setError('')
               }}
+              disabled={isLoading}
               placeholder="예: 이번 학기 중간고사 기간은 언제인가요?"
               aria-describedby={error ? 'question-error' : 'question-help'}
               aria-invalid={Boolean(error)}
             />
-            <button className="search-button" type="submit">
-              <Search size={19} />
-              <span>공식 정보 찾기</span>
+            <button className="search-button" type="submit" disabled={isLoading}>
+              {isLoading ? <LoaderCircle className="loading-spinner" size={19} /> : <Search size={19} />}
+              <span>{isLoading ? '질문 확인 중' : '공식 정보 찾기'}</span>
             </button>
           </div>
           <div className="input-meta">
@@ -211,12 +232,21 @@ function SearchPanel() {
           </div>
         </div>
 
-        {submittedQuestion && (
+        {result && (
           <div className="phase-notice" role="status">
             <Sparkles size={20} aria-hidden="true" />
             <div>
-              <strong>“{submittedQuestion}”</strong>
-              <p>질문 입력 화면이 정상 동작합니다. 다음 단계에서 Hono 검색 API를 연결합니다.</p>
+              <strong>{result.answer.title}</strong>
+              <p>{result.answer.content}</p>
+              <ul className="api-result-fields">
+                {result.answer.fields.map((field) => (
+                  <li key={field.label}>
+                    <span>{field.label}</span>
+                    <b>{field.value}</b>
+                  </li>
+                ))}
+              </ul>
+              <small>요청 번호: {result.meta.requestId}</small>
             </div>
           </div>
         )}

@@ -107,6 +107,14 @@ a { color: inherit; text-decoration: none; }
 .phase-notice svg { flex: 0 0 auto; color: var(--green); margin-top: 2px; }
 .phase-notice strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
 .phase-notice p { margin: 4px 0 0; color: #5d716b; font-size: 11px; line-height: 1.5; }
+.phase-notice small { display: block; margin-top: 10px; color: #71847e; font-size: 9px; overflow-wrap: anywhere; }
+.api-result-fields { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.api-result-fields li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 8px 10px; background: rgba(255, 255, 255, .68); border-radius: 8px; font-size: 10px; }
+.api-result-fields span { color: #697d76; }
+.api-result-fields b { color: #27443c; }
+.search-button:disabled, .search-input-wrap textarea:disabled { cursor: wait; opacity: .72; }
+.loading-spinner { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .result-preview { margin-top: 38px; }
 .preview-label { margin-bottom: 14px; }
