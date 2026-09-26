@@ -99,7 +99,9 @@ export function createChatRoute(dependencies: ChatRouteDependencies = {}) {
   }
 
   const analysis = analyzeQuestion(question)
-  const resolved = await resolver(analysis)
+  const resolved = await resolver(analysis, {
+    context: { requestId: requestMeta.requestId },
+  })
 
   const response: ChatSuccessResponse = {
     ok: true,

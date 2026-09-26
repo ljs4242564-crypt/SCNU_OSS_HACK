@@ -6,7 +6,7 @@ import type {
   SearchReport,
   UpstreamStatus,
 } from '../shared/api'
-import type { PipelineResult, VerifiedDocument } from '../types/pipeline'
+import type { PipelineResult, RequestContext, VerifiedDocument } from '../types/pipeline'
 import { formatRuleBasedAnswer } from './answerFormatter'
 import { fetchAndVerifyCandidates } from './pageFetcher'
 import { searchOfficialSources } from './searchService'
@@ -34,6 +34,7 @@ type ResolverDependencies = {
   timeoutMs?: number
   now?: () => Date
   fetcher?: typeof fetch
+  context?: RequestContext
 }
 
 const emptySearch = (status: SearchReport['status'] = 'skipped'): SearchReport => ({
@@ -96,8 +97,18 @@ async function runLivePipeline(
 ): Promise<{ search: SearchReport; documents: VerifiedDocument[] }> {
   const searcher = dependencies.searcher ?? searchOfficialSources
   const documentFetcher = dependencies.documentFetcher ?? fetchAndVerifyCandidates
-  const search = await searcher(analysis, { fetcher: dependencies.fetcher, signal })
-  const documents = await documentFetcher(search, analysis, dependencies.fetcher ?? fetch, signal)
+  const search = await searcher(analysis, {
+    fetcher: dependencies.fetcher,
+    signal,
+    context: dependencies.context,
+  })
+  const documents = await documentFetcher(
+    search,
+    analysis,
+    dependencies.fetcher ?? fetch,
+    signal,
+    dependencies.context,
+  )
   return { search, documents }
 }
 
@@ -156,7 +167,11 @@ export async function resolveAnswer(
     upstreamStatus = 'http_error'
   } catch (error) {
     upstreamStatus = classifyFailure(error)
-    console.warn('Live answer pipeline failed', { upstreamStatus, errorCode: error instanceof Error ? error.name : 'UNKNOWN' })
+    console.warn('Live answer pipeline failed', {
+      requestId: dependencies.context?.requestId ?? 'untracked',
+      upstreamStatus,
+      errorCode: error instanceof Error ? error.name : 'UNKNOWN',
+    })
   } finally {
     clearTimeout(timeout)
   }

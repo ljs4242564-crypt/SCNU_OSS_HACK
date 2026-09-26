@@ -1,5 +1,10 @@
 import type { QuestionAnalysis, SearchCandidate } from '../shared/api'
 
+export type RequestContext = {
+  requestId: string
+  sourceId?: string
+}
+
 export type ExtractedInformation = {
   startDate: string | null
   endDate: string | null

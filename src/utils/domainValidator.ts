@@ -1,4 +1,5 @@
 import { OFFICIAL_HOST_POLICIES, URL_SECURITY_LIMITS } from '../config/domains'
+import type { RequestContext } from '../types/pipeline'
 
 export type UrlValidationResult =
   | { valid: true; url: URL }
@@ -67,7 +68,8 @@ export async function safeFetchOfficial(
   rawUrl: string | URL,
   init: RequestInit = {},
   fetcher: typeof fetch = fetch,
-): Promise<{ response: Response; finalUrl: URL }> {
+  context?: RequestContext,
+): Promise<{ response: Response; finalUrl: URL; redirectCount: number }> {
   let validation = validateOfficialUrl(rawUrl)
   if (!validation.valid) throw new Error(validation.reason)
 
@@ -78,9 +80,11 @@ export async function safeFetchOfficial(
   if (parentSignal?.aborted) abortFromParent()
   else parentSignal?.addEventListener('abort', abortFromParent, { once: true })
   const timeout = setTimeout(() => controller.abort('official fetch timeout'), URL_SECURITY_LIMITS.timeoutMs)
+  const startedAt = Date.now()
+  let redirectCount = 0
 
   try {
-    for (let redirectCount = 0; redirectCount <= URL_SECURITY_LIMITS.maxRedirects; redirectCount += 1) {
+    for (redirectCount = 0; redirectCount <= URL_SECURITY_LIMITS.maxRedirects; redirectCount += 1) {
       const response = await fetcher(currentUrl, {
         ...init,
         redirect: 'manual',
@@ -88,7 +92,14 @@ export async function safeFetchOfficial(
       })
 
       if (response.status < 300 || response.status >= 400) {
-        return { response, finalUrl: currentUrl }
+        console.info('Official upstream request completed', {
+          requestId: context?.requestId ?? 'untracked',
+          sourceId: context?.sourceId ?? 'unknown',
+          durationMs: Date.now() - startedAt,
+          httpStatus: response.status,
+          redirectCount,
+        })
+        return { response, finalUrl: currentUrl, redirectCount }
       }
 
       const location = response.headers.get('location')
@@ -101,6 +112,16 @@ export async function safeFetchOfficial(
       if (!validation.valid) throw new Error(`안전하지 않은 redirect: ${validation.reason}`)
       currentUrl = validation.url
     }
+  } catch (error) {
+    console.warn('Official upstream request failed', {
+      requestId: context?.requestId ?? 'untracked',
+      sourceId: context?.sourceId ?? 'unknown',
+      durationMs: Date.now() - startedAt,
+      httpStatus: null,
+      redirectCount,
+      errorCode: error instanceof Error ? error.name : 'UNKNOWN',
+    })
+    throw error
   } finally {
     clearTimeout(timeout)
     parentSignal?.removeEventListener('abort', abortFromParent)

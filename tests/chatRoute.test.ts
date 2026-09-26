@@ -47,6 +47,10 @@ describe('POST /chat', () => {
       expect(body.meta.answerMode).toBe('snapshot')
       expect(body.meta.upstreamStatus).toBe('timeout')
       expect(body.meta.cacheHit).toBe(true)
+      expect(resolver).toHaveBeenCalledWith(
+        expect.any(Object),
+        { context: { requestId: body.meta.requestId } },
+      )
     }
   })
 

@@ -6,12 +6,14 @@ import {
   type SearchableCategory,
 } from '../config/sources'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
+import type { RequestContext } from '../types/pipeline'
 import { readResponseText, validateOfficialUrl, safeFetchOfficial } from '../utils/domainValidator'
 import { parseScnuBoardList, type ParsedBoardItem } from './boardParser'
 
 export type SearchDependencies = {
   fetcher?: typeof fetch
   signal?: AbortSignal
+  context?: RequestContext
 }
 
 function includesKeyword(value: string, keyword: string) {
@@ -98,6 +100,7 @@ async function fetchBoard(
   searchTerm: string,
   fetcher: typeof fetch,
   signal?: AbortSignal,
+  context?: RequestContext,
 ): Promise<ParsedBoardItem[]> {
   if (!validateOfficialUrl(source.url).valid) {
     throw new Error('등록된 공식 출처 URL이 안전하지 않습니다.')
@@ -119,7 +122,7 @@ async function fetchBoard(
         Referer: `${source.url}?bbsId=${source.boardId}&mi=${source.menuId}`,
         'User-Agent': 'Mozilla/5.0 (compatible; SCNUCampusAssistant/0.5; +https://www.scnu.ac.kr/)',
       },
-    }, fetcher)
+    }, fetcher, context)
 
   if (!response.ok) {
     throw new Error(`공식 게시판 응답 오류(${response.status})`)
@@ -162,9 +165,11 @@ export async function searchOfficialSources(
   const searchTerms = buildSearchTerms(analysis)
   const candidates: SearchCandidate[] = []
   const failedSources: SearchReport['failedSources'] = []
+  const sourceStartedAt = new Map<string, number>()
 
   const results = await Promise.allSettled(
     selectedSources.map(async (source) => {
+      sourceStartedAt.set(source.id, Date.now())
       if (!validateOfficialUrl(source.url).valid) {
         throw new Error('등록된 출처가 공식 호스트 검사를 통과하지 못했습니다.')
       }
@@ -174,7 +179,13 @@ export async function searchOfficialSources(
       }
 
       const pages = await Promise.all(
-        searchTerms.map((searchTerm) => fetchBoard(source, searchTerm, fetcher, dependencies.signal)),
+        searchTerms.map((searchTerm) => fetchBoard(
+          source,
+          searchTerm,
+          fetcher,
+          dependencies.signal,
+          { ...dependencies.context, requestId: dependencies.context?.requestId ?? 'untracked', sourceId: source.id },
+        )),
       )
       return pages.flat().map((item) => {
         const relevance = scoreCandidate(item, analysis)
@@ -193,12 +204,22 @@ export async function searchOfficialSources(
   )
 
   results.forEach((result, index) => {
+    const sourceId = selectedSources[index].id
+    const durationMs = Date.now() - (sourceStartedAt.get(sourceId) ?? Date.now())
     if (result.status === 'fulfilled') {
       candidates.push(...result.value)
-    } else {
-      const sourceId = selectedSources[index].id
-      console.warn('Official source search failed', {
+      console.info('Official source search completed', {
+        requestId: dependencies.context?.requestId ?? 'untracked',
         sourceId,
+        durationMs,
+        parserResultCount: result.value.length,
+      })
+    } else {
+      console.warn('Official source search failed', {
+        requestId: dependencies.context?.requestId ?? 'untracked',
+        sourceId,
+        durationMs,
+        parserResultCount: 0,
         errorCode: result.reason instanceof Error ? result.reason.name : 'UNKNOWN',
       })
       failedSources.push({

@@ -1,6 +1,6 @@
 import { URL_SECURITY_LIMITS } from '../config/domains'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
-import type { VerifiedDocument } from '../types/pipeline'
+import type { RequestContext, VerifiedDocument } from '../types/pipeline'
 import { readResponseText, safeFetchOfficial } from '../utils/domainValidator'
 import { extractOfficialDocument, extractStructuredInformation } from './contentExtractor'
 
@@ -46,6 +46,7 @@ async function fetchAcademicCalendar(
   fetcher: typeof fetch,
   checkedAt: string,
   signal?: AbortSignal,
+  context?: RequestContext,
 ): Promise<VerifiedDocument[]> {
   if (analysis.category !== 'academic' || analysis.intent !== 'schedule') return []
 
@@ -58,7 +59,7 @@ async function fetchAcademicCalendar(
       Referer: CALENDAR_PAGE,
     },
     body: 'sysId=SCNU',
-  }, fetcher)
+  }, fetcher, { ...context, requestId: context?.requestId ?? 'untracked', sourceId: 'academic-calendar' })
   if (!response.ok) throw new Error(`http_error: 학사일정 응답 오류(${response.status})`)
 
   let data: unknown
@@ -115,12 +116,13 @@ async function fetchHtmlDocument(
   fetcher: typeof fetch,
   checkedAt: string,
   signal?: AbortSignal,
+  context?: RequestContext,
 ) {
   const { response, finalUrl } = await safeFetchOfficial(candidate.url, {
     method: 'GET',
     signal,
     headers: { ...REQUEST_HEADERS, Referer: 'https://www.scnu.ac.kr/' },
-  }, fetcher)
+  }, fetcher, { ...context, requestId: context?.requestId ?? 'untracked', sourceId: candidate.sourceId })
   if (!response.ok) throw new Error(`http_error: 공식 원문 응답 오류(${response.status})`)
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.includes('text/html')) throw new Error('parse_error: 공식 원문이 HTML이 아닙니다.')
@@ -133,6 +135,7 @@ export async function fetchAndVerifyCandidates(
   analysis: QuestionAnalysis,
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
+  context?: RequestContext,
 ): Promise<VerifiedDocument[]> {
   if (!analysis.supported || analysis.ambiguous) return []
   const checkedAt = new Date().toISOString().slice(0, 10)
@@ -142,10 +145,25 @@ export async function fetchAndVerifyCandidates(
 
   if (analysis.category === 'academic' && analysis.intent === 'schedule') {
     attemptedDocuments += 1
+    const startedAt = Date.now()
     try {
-      documents.push(...await fetchAcademicCalendar(analysis, fetcher, checkedAt, signal))
+      const calendarDocuments = await fetchAcademicCalendar(analysis, fetcher, checkedAt, signal, context)
+      documents.push(...calendarDocuments)
+      console.info('Official document parsing completed', {
+        requestId: context?.requestId ?? 'untracked',
+        sourceId: 'academic-calendar',
+        durationMs: Date.now() - startedAt,
+        parserResultCount: calendarDocuments.length,
+      })
     } catch (error) {
       failures.push(error)
+      console.warn('Official document parsing failed', {
+        requestId: context?.requestId ?? 'untracked',
+        sourceId: 'academic-calendar',
+        durationMs: Date.now() - startedAt,
+        parserResultCount: 0,
+        errorCode: error instanceof Error ? error.name : 'UNKNOWN',
+      })
     }
   }
 
@@ -155,12 +173,27 @@ export async function fetchAndVerifyCandidates(
     attemptedDocuments += candidates.length
     const fetched = await Promise.allSettled(
       candidates.map((candidate) =>
-        fetchHtmlDocument(candidate, analysis, fetcher, checkedAt, signal),
+        fetchHtmlDocument(candidate, analysis, fetcher, checkedAt, signal, context),
       ),
     )
-    for (const result of fetched) {
-      if (result.status === 'fulfilled' && result.value?.relevant) documents.push(result.value)
-      if (result.status === 'rejected') failures.push(result.reason)
+    for (const [index, result] of fetched.entries()) {
+      const candidate = candidates[index]
+      if (result.status === 'fulfilled') {
+        if (result.value?.relevant) documents.push(result.value)
+        console.info('Official document parsing completed', {
+          requestId: context?.requestId ?? 'untracked',
+          sourceId: candidate.sourceId,
+          parserResultCount: result.value?.relevant ? 1 : 0,
+        })
+      } else {
+        failures.push(result.reason)
+        console.warn('Official document parsing failed', {
+          requestId: context?.requestId ?? 'untracked',
+          sourceId: candidate.sourceId,
+          parserResultCount: 0,
+          errorCode: result.reason instanceof Error ? result.reason.name : 'UNKNOWN',
+        })
+      }
     }
   }
 
