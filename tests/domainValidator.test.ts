@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { safeFetchOfficial, validateOfficialUrl } from '../src/utils/domainValidator'
+import { readResponseText, safeFetchOfficial, validateOfficialUrl } from '../src/utils/domainValidator'
 
 describe('validateOfficialUrl', () => {
   it.each([
@@ -20,6 +20,18 @@ describe('validateOfficialUrl', () => {
     'https://www.scnu.ac.kr/admin/private',
   ])('안전하지 않은 URL을 거부한다: %s', (url) => {
     expect(validateOfficialUrl(url).valid).toBe(false)
+  })
+})
+
+describe('readResponseText', () => {
+  it('Content-Length가 제한을 넘으면 본문을 읽기 전에 거부한다', async () => {
+    const response = new Response('short', { headers: { 'Content-Length': '100' } })
+    await expect(readResponseText(response, 10)).rejects.toThrow('허용된 크기')
+  })
+
+  it('스트리밍 본문이 제한을 넘으면 읽기를 중단한다', async () => {
+    const response = new Response('가'.repeat(20))
+    await expect(readResponseText(response, 10)).rejects.toThrow('허용된 크기')
   })
 })
 

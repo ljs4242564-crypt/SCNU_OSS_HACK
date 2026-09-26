@@ -33,6 +33,36 @@ export function validateOfficialUrl(rawUrl: string | URL): UrlValidationResult {
   return { valid: true, url }
 }
 
+export async function readResponseText(response: Response, maxBytes: number) {
+  const declaredLength = Number(response.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error('공식 사이트 응답이 허용된 크기를 초과했습니다.')
+  }
+
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let totalBytes = 0
+  let text = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      if (totalBytes > maxBytes) {
+        await reader.cancel('response size limit exceeded')
+        throw new Error('공식 사이트 응답이 허용된 크기를 초과했습니다.')
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    return text + decoder.decode()
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 export async function safeFetchOfficial(
   rawUrl: string | URL,
   init: RequestInit = {},
@@ -43,7 +73,11 @@ export async function safeFetchOfficial(
 
   let currentUrl = validation.url
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), URL_SECURITY_LIMITS.timeoutMs)
+  const parentSignal = init.signal
+  const abortFromParent = () => controller.abort(parentSignal?.reason)
+  if (parentSignal?.aborted) abortFromParent()
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true })
+  const timeout = setTimeout(() => controller.abort('official fetch timeout'), URL_SECURITY_LIMITS.timeoutMs)
 
   try {
     for (let redirectCount = 0; redirectCount <= URL_SECURITY_LIMITS.maxRedirects; redirectCount += 1) {
@@ -69,6 +103,7 @@ export async function safeFetchOfficial(
     }
   } finally {
     clearTimeout(timeout)
+    parentSignal?.removeEventListener('abort', abortFromParent)
   }
 
   throw new Error('공식 페이지 요청을 완료하지 못했습니다.')

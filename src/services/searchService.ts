@@ -6,11 +6,12 @@ import {
   type SearchableCategory,
 } from '../config/sources'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
-import { validateOfficialUrl, safeFetchOfficial } from '../utils/domainValidator'
+import { readResponseText, validateOfficialUrl, safeFetchOfficial } from '../utils/domainValidator'
 import { parseScnuBoardList, type ParsedBoardItem } from './boardParser'
 
-type SearchDependencies = {
+export type SearchDependencies = {
   fetcher?: typeof fetch
+  signal?: AbortSignal
 }
 
 function includesKeyword(value: string, keyword: string) {
@@ -96,6 +97,7 @@ async function fetchBoard(
   source: BoardSource,
   searchTerm: string,
   fetcher: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<ParsedBoardItem[]> {
   if (!validateOfficialUrl(source.url).valid) {
     throw new Error('등록된 공식 출처 URL이 안전하지 않습니다.')
@@ -110,6 +112,7 @@ async function fetchBoard(
 
   const { response, finalUrl } = await safeFetchOfficial(requestUrl, {
       method: 'GET',
+      signal,
       headers: {
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'ko-KR,ko;q=0.9',
@@ -127,10 +130,7 @@ async function fetchBoard(
     throw new Error('공식 게시판이 HTML 문서를 반환하지 않았습니다.')
   }
 
-  const html = await response.text()
-  if (html.length > SEARCH_LIMITS.maxHtmlCharacters) {
-    throw new Error('공식 게시판 응답이 허용된 크기를 초과했습니다.')
-  }
+  const html = await readResponseText(response, SEARCH_LIMITS.maxHtmlCharacters)
 
   return parseScnuBoardList(html, finalUrl.toString(), source.name)
 }
@@ -174,7 +174,7 @@ export async function searchOfficialSources(
       }
 
       const pages = await Promise.all(
-        searchTerms.map((searchTerm) => fetchBoard(source, searchTerm, fetcher)),
+        searchTerms.map((searchTerm) => fetchBoard(source, searchTerm, fetcher, dependencies.signal)),
       )
       return pages.flat().map((item) => {
         const relevance = scoreCandidate(item, analysis)
@@ -196,9 +196,14 @@ export async function searchOfficialSources(
     if (result.status === 'fulfilled') {
       candidates.push(...result.value)
     } else {
+      const sourceId = selectedSources[index].id
+      console.warn('Official source search failed', {
+        sourceId,
+        errorCode: result.reason instanceof Error ? result.reason.name : 'UNKNOWN',
+      })
       failedSources.push({
-        sourceId: selectedSources[index].id,
-        reason: result.reason instanceof Error ? result.reason.message : '공식 출처 검색에 실패했습니다.',
+        sourceId,
+        reason: '공식 출처 검색에 실패했습니다.',
       })
     }
   })

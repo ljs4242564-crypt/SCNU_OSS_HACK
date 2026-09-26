@@ -12,18 +12,29 @@ function cleanText(value: string) {
 }
 
 function normalizeDate(year: string, month: string, day: string) {
+  const monthNumber = Number(month)
+  const dayNumber = Number(day)
+  if (monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) return null
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
 }
 
 function extractDates(text: string, fallbackYear: number) {
   const dates: string[] = []
   const fullDate = /(20\d{2})\s*(?:년|[.\/-])\s*(\d{1,2})\s*(?:월|[.\/-])\s*(\d{1,2})\s*(?:일)?/g
+  const abbreviatedDate = /(?:^|[^\d])(?:['’])?(\d{2})\.\s*(\d{1,2})\.\s*(\d{1,2})(?:\.|\D|$)/g
   const shortDate = /(?<!\d)(\d{1,2})\s*(?:월|[.\/])\s*(\d{1,2})\s*(?:일)?/g
 
-  for (const match of text.matchAll(fullDate)) dates.push(normalizeDate(match[1], match[2], match[3]))
+  for (const match of text.matchAll(fullDate)) {
+    const value = normalizeDate(match[1], match[2], match[3])
+    if (value) dates.push(value)
+  }
+  for (const match of text.matchAll(abbreviatedDate)) {
+    const value = normalizeDate(`20${match[1]}`, match[2], match[3])
+    if (value && !dates.includes(value)) dates.push(value)
+  }
   for (const match of text.matchAll(shortDate)) {
     const value = normalizeDate(String(fallbackYear), match[1], match[2])
-    if (!dates.includes(value)) dates.push(value)
+    if (value && !dates.includes(value)) dates.push(value)
   }
   return dates.slice(0, 10)
 }

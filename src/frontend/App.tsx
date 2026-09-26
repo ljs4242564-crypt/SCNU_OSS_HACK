@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { CampusApiError, submitCampusQuestion } from './lib/api'
-import type { ChatSuccessResponse } from '../shared/api'
+import type { ChatStatus, ChatSuccessResponse } from '../shared/api'
 
 type QuickQuestion = {
   label: string
@@ -162,12 +162,16 @@ function SearchPanel() {
     }
   }
 
-  const resultStatus = result ? {
-    verified: { label: '공식 홈페이지에서 확인됨', icon: CheckCircle2 },
+  const statusPresentation: Record<ChatStatus, { label: string; icon: LucideIcon }> = {
+    verified_live: { label: '실시간 공식 원문 확인', icon: CheckCircle2 },
+    verified_snapshot: { label: '사전 검증 자료 사용', icon: ShieldCheck },
+    stale: { label: '오래된 마지막 검증본', icon: AlertTriangle },
     conflicting: { label: '서로 다른 공식 자료가 확인됨', icon: AlertTriangle },
-    not_found: { label: '공식 홈페이지에서 확인하지 못함', icon: CircleX },
+    not_found: { label: '정상 조회했지만 관련 자료 없음', icon: CircleX },
+    upstream_unavailable: { label: '공식 출처와 대체 자료 확인 실패', icon: CircleX },
     pending: { label: '공식 자료 확인 중', icon: Sparkles },
-  }[result.status] : null
+  }
+  const resultStatus = result ? statusPresentation[result.status] : null
   const ResultStatusIcon = resultStatus?.icon
 
   return (
@@ -292,6 +296,14 @@ function SearchPanel() {
               {result.search.failedSources.length > 0 && (
                 <p className="partial-search-note">일부 공식 출처는 일시적으로 확인하지 못했습니다.</p>
               )}
+              <dl className="response-meta" aria-label="응답 확인 정보">
+                <div><dt>답변 방식</dt><dd>{result.meta.answerMode}</dd></div>
+                <div><dt>공식 사이트 상태</dt><dd>{result.meta.upstreamStatus}</dd></div>
+                <div><dt>처리 시간</dt><dd>{result.meta.durationMs}ms</dd></div>
+                {result.meta.lastSuccessfulCheck && (
+                  <div><dt>마지막 성공 확인</dt><dd>{result.meta.lastSuccessfulCheck}</dd></div>
+                )}
+              </dl>
               <small>요청 번호: {result.meta.requestId}</small>
             </div>
           </article>

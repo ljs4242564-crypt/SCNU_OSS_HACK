@@ -11,7 +11,10 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY')
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+  c.header('Strict-Transport-Security', 'max-age=31536000')
+  c.header('Cross-Origin-Opener-Policy', 'same-origin')
+  c.header('Cross-Origin-Resource-Policy', 'same-origin')
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
   if (c.req.path.startsWith('/api/')) c.header('Cache-Control', 'no-store')
 })
 
@@ -35,7 +38,10 @@ app.all('/api/*', (c) => {
 })
 
 app.onError((error, c) => {
-  console.error('Unhandled API error', error)
+  console.error('Unhandled API error', {
+    errorCode: error.name || 'UNKNOWN',
+    requestPath: c.req.path.startsWith('/api/') ? c.req.path : 'non-api',
+  })
 
   if (c.req.path.startsWith('/api/')) {
     const response: ApiErrorResponse = {

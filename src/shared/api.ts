@@ -1,7 +1,26 @@
 export const CHAT_QUESTION_MAX_LENGTH = 160
 export const CHAT_QUESTION_MIN_LENGTH = 2
 
-export type ChatStatus = 'pending' | 'verified' | 'conflicting' | 'not_found'
+export type ChatStatus =
+  | 'pending'
+  | 'verified_live'
+  | 'verified_snapshot'
+  | 'stale'
+  | 'conflicting'
+  | 'not_found'
+  | 'upstream_unavailable'
+
+export type UpstreamStatus = 'ok' | 'timeout' | 'http_error' | 'parse_error' | 'skipped'
+
+export type ResponseMeta = {
+  requestId: string
+  processedAt: string
+  answerMode: 'live' | 'snapshot' | 'unavailable'
+  durationMs: number
+  upstreamStatus: UpstreamStatus
+  cacheHit: boolean
+  lastSuccessfulCheck: string | null
+}
 
 export type QuestionCategory =
   | 'academic'
@@ -93,10 +112,7 @@ export type ChatSuccessResponse = {
     fields: AnswerField[]
   }
   sources: AnswerSource[]
-  meta: {
-    requestId: string
-    processedAt: string
-  }
+  meta: ResponseMeta
 }
 
 export type ApiErrorCode =

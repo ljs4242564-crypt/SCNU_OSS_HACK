@@ -1,8 +1,7 @@
 import { Hono } from 'hono'
-import { formatRuleBasedAnswer } from '../services/answerFormatter'
-import { fetchAndVerifyCandidates } from '../services/pageFetcher'
+import { bodyLimit } from 'hono/body-limit'
+import { resolveAnswer } from '../services/answerResolver'
 import { analyzeQuestion } from '../services/questionAnalyzer'
-import { searchOfficialSources } from '../services/searchService'
 import { normalizeQuestion } from '../utils/textNormalizer'
 import {
   CHAT_QUESTION_MAX_LENGTH,
@@ -15,7 +14,9 @@ import {
 
 const MAX_REQUEST_BYTES = 4_096
 
-export const chatRoute = new Hono()
+type ChatRouteDependencies = {
+  resolver?: typeof resolveAnswer
+}
 
 function createRequestMeta() {
   return {
@@ -32,9 +33,22 @@ function errorResponse(code: ApiErrorCode, message: string): ApiErrorResponse {
   }
 }
 
-chatRoute.post('/chat', async (c) => {
+export function createChatRoute(dependencies: ChatRouteDependencies = {}) {
+  const route = new Hono()
+  const resolver = dependencies.resolver ?? resolveAnswer
+
+  route.post(
+    '/chat',
+    bodyLimit({
+      maxSize: MAX_REQUEST_BYTES,
+      onError: (c) => c.json(errorResponse('PAYLOAD_TOO_LARGE', '요청 데이터가 너무 큽니다.'), 413),
+    }),
+    async (c) => {
+  const startedAt = Date.now()
+  const requestMeta = createRequestMeta()
   const contentType = c.req.header('content-type') ?? ''
-  if (!contentType.toLowerCase().startsWith('application/json')) {
+  const mediaType = contentType.split(';', 1)[0].trim().toLowerCase()
+  if (mediaType !== 'application/json') {
     return c.json(
       errorResponse('INVALID_CONTENT_TYPE', 'Content-Type은 application/json이어야 합니다.'),
       415,
@@ -85,24 +99,43 @@ chatRoute.post('/chat', async (c) => {
   }
 
   const analysis = analyzeQuestion(question)
-  const search = await searchOfficialSources(analysis)
-  const documents = await fetchAndVerifyCandidates(search, analysis)
-  const formatted = formatRuleBasedAnswer(analysis, search, documents)
+  const resolved = await resolver(analysis)
 
   const response: ChatSuccessResponse = {
     ok: true,
-    status: formatted.status,
+    status: resolved.status,
     question,
     analysis,
-    search,
+    search: resolved.search,
     answer: {
-      title: formatted.title,
-      content: formatted.content,
-      fields: formatted.fields,
+      title: resolved.title,
+      content: resolved.content,
+      fields: resolved.fields,
     },
-    sources: formatted.sources,
-    meta: createRequestMeta(),
+    sources: resolved.sources,
+    meta: {
+      ...requestMeta,
+      answerMode: resolved.answerMode,
+      durationMs: Date.now() - startedAt,
+      upstreamStatus: resolved.upstreamStatus,
+      cacheHit: resolved.cacheHit,
+      lastSuccessfulCheck: resolved.lastSuccessfulCheck,
+    },
   }
 
-  return c.json(response, 200)
-})
+  console.log('Chat request resolved', {
+    requestId: requestMeta.requestId,
+    durationMs: response.meta.durationMs,
+    upstreamStatus: response.meta.upstreamStatus,
+    cacheHit: response.meta.cacheHit,
+    status: response.status,
+  })
+
+    return c.json(response, 200)
+    },
+  )
+
+  return route
+}
+
+export const chatRoute = createChatRoute()

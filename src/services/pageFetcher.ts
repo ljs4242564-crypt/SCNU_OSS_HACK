@@ -1,7 +1,7 @@
 import { URL_SECURITY_LIMITS } from '../config/domains'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
 import type { VerifiedDocument } from '../types/pipeline'
-import { safeFetchOfficial } from '../utils/domainValidator'
+import { readResponseText, safeFetchOfficial } from '../utils/domainValidator'
 import { extractOfficialDocument, extractStructuredInformation } from './contentExtractor'
 
 const CALENDAR_API = 'https://www.scnu.ac.kr/haksa/sv/schdulView/selectSvList.do'
@@ -45,11 +45,13 @@ async function fetchAcademicCalendar(
   analysis: QuestionAnalysis,
   fetcher: typeof fetch,
   checkedAt: string,
+  signal?: AbortSignal,
 ): Promise<VerifiedDocument[]> {
   if (analysis.category !== 'academic' || analysis.intent !== 'schedule') return []
 
   const { response } = await safeFetchOfficial(CALENDAR_API, {
     method: 'POST',
+    signal,
     headers: {
       ...REQUEST_HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
@@ -57,10 +59,17 @@ async function fetchAcademicCalendar(
     },
     body: 'sysId=SCNU',
   }, fetcher)
-  if (!response.ok) return []
+  if (!response.ok) throw new Error(`http_error: 학사일정 응답 오류(${response.status})`)
 
-  const data = await response.json() as unknown
-  if (!Array.isArray(data)) return []
+  let data: unknown
+  try {
+    const json = await readResponseText(response, URL_SECURITY_LIMITS.maxResponseCharacters)
+    data = JSON.parse(json) as unknown
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('허용된 크기')) throw error
+    throw new Error('parse_error: 학사일정 JSON을 해석하지 못했습니다.')
+  }
+  if (!Array.isArray(data)) throw new Error('parse_error: 학사일정 응답 형식이 배열이 아닙니다.')
 
   return (data as CalendarEvent[])
     .filter((event) => calendarMatches(event, analysis))
@@ -105,16 +114,17 @@ async function fetchHtmlDocument(
   analysis: QuestionAnalysis,
   fetcher: typeof fetch,
   checkedAt: string,
+  signal?: AbortSignal,
 ) {
   const { response, finalUrl } = await safeFetchOfficial(candidate.url, {
     method: 'GET',
+    signal,
     headers: { ...REQUEST_HEADERS, Referer: 'https://www.scnu.ac.kr/' },
   }, fetcher)
-  if (!response.ok) return null
+  if (!response.ok) throw new Error(`http_error: 공식 원문 응답 오류(${response.status})`)
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-  if (!contentType.includes('text/html')) return null
-  const html = await response.text()
-  if (html.length > URL_SECURITY_LIMITS.maxResponseCharacters) return null
+  if (!contentType.includes('text/html')) throw new Error('parse_error: 공식 원문이 HTML이 아닙니다.')
+  const html = await readResponseText(response, URL_SECURITY_LIMITS.maxResponseCharacters)
   return extractOfficialDocument(html, candidate, analysis, finalUrl.toString(), checkedAt)
 }
 
@@ -122,27 +132,41 @@ export async function fetchAndVerifyCandidates(
   search: SearchReport,
   analysis: QuestionAnalysis,
   fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<VerifiedDocument[]> {
   if (!analysis.supported || analysis.ambiguous) return []
   const checkedAt = new Date().toISOString().slice(0, 10)
   const documents: VerifiedDocument[] = []
+  const failures: unknown[] = []
+  let attemptedDocuments = 0
 
-  try {
-    documents.push(...await fetchAcademicCalendar(analysis, fetcher, checkedAt))
-  } catch {
-    // Calendar failure does not prevent the verified HTML candidate fallback.
+  if (analysis.category === 'academic' && analysis.intent === 'schedule') {
+    attemptedDocuments += 1
+    try {
+      documents.push(...await fetchAcademicCalendar(analysis, fetcher, checkedAt, signal))
+    } catch (error) {
+      failures.push(error)
+    }
   }
 
   const remainingSlots = Math.max(0, 3 - documents.length)
   if (remainingSlots > 0) {
+    const candidates = search.candidates.slice(0, remainingSlots)
+    attemptedDocuments += candidates.length
     const fetched = await Promise.allSettled(
-      search.candidates.slice(0, remainingSlots).map((candidate) =>
-        fetchHtmlDocument(candidate, analysis, fetcher, checkedAt),
+      candidates.map((candidate) =>
+        fetchHtmlDocument(candidate, analysis, fetcher, checkedAt, signal),
       ),
     )
     for (const result of fetched) {
       if (result.status === 'fulfilled' && result.value?.relevant) documents.push(result.value)
+      if (result.status === 'rejected') failures.push(result.reason)
     }
+  }
+
+  if (documents.length === 0 && failures.length > 0) throw failures[0]
+  if (documents.length === 0 && attemptedDocuments > 0) {
+    throw new Error('parse_error: 공식 원문에서 질문에 맞는 근거를 추출하지 못했습니다.')
   }
 
   return documents.slice(0, 3)

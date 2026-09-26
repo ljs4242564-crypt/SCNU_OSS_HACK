@@ -1,77 +1,89 @@
 # SCNU Campus Assistant
 
-국립순천대학교 학생이 학사일정, 장학금, 도서관, 학생지원, 부서 연락처를 자연어로 질문하면 공식 웹사이트만 검색하고 원문 근거와 출처를 함께 보여주는 모바일 우선 웹 앱입니다.
+국립순천대학교 학생의 학사일정, 장학금, 도서관, 학생지원, 부서 연락처 질문을 **LLM 없이 규칙 기반으로 분석**하고, 학교 공식 원문과 확인 상태를 함께 보여주는 모바일 우선 웹 앱입니다.
 
-> 이 서비스는 OpenAI, GPT, Gemini, Claude 등 LLM API를 사용하지 않습니다. 질문 분석, 검색 순위, 정보 추출, 답변 생성은 키워드·정규식·점수·템플릿 규칙으로 동작합니다.
+> GPT, Solar, Gemini, Claude 등 런타임 LLM API를 사용하지 않습니다. 공식 원문을 확인하지 못한 내용은 추측하지 않습니다.
 
-## 서비스 URL
+## 현재 상태
 
-- **Production**: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com
-- **Health API**: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com/api/health
-- **GitHub**: https://github.com/ljs4242564-crypt/-SCNU_OSS-AI-
+- 로컬 구현: Phase 0~4 완료
+- 기준 브랜치/원격 커밋: `main` / `9faf57e`
+- 로컬 테스트: **60개 통과**, 선택적 live 테스트 1개 분리
+- 타입 검사·프로덕션 빌드: 통과
+- 로컬 미리보기: `http://localhost:3000`
+- Genspark 관리형 Cloudflare 배포: 2026-09-26 완료 및 검증
+- Worker 버전: `b19cfbbb-45d7-4eaa-82a4-05a78c28717d`
+- GitHub push: 아직 수행하지 않음
 
-## 해결하려는 문제
+## URL
 
-학교생활 정보가 여러 공식 홈페이지와 게시판에 흩어져 있어 학생이 직접 검색하고 최신성과 출처를 다시 확인해야 합니다. 이 프로젝트는 공식 출처 검색, 원문 검증, 정보 추출, 출처 표시를 하나의 흐름으로 연결합니다.
+- **Production**: https://522a274e-b8bf-4c02-86be-41421d46a017.vip.gensparksite.com/
+- **Health API**: https://522a274e-b8bf-4c02-86be-41421d46a017.vip.gensparksite.com/api/health
+- 이전 배포 URL: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com/
+- GitHub: https://github.com/ljs4242564-crypt/SCNU_OSS_HACK
 
-## 현재 완료된 기능
+배포 성공은 HTTP 200만으로 판단하지 않습니다. 루트가 실제 앱 HTML인지, `/api/health`가 `application/json`과 `status: ok`를 반환하는지 함께 확인합니다.
 
-- React + TypeScript 모바일 우선 UI
-- 5개 MVP 분야 빠른 질문
-  - 학사일정
-  - 장학금
-  - 도서관
-  - 학생지원
-  - 부서 연락처
-- Hono `POST /api/chat`, `GET /api/health`
-- 입력 형식·크기·길이 검증
-- 키워드 점수 기반 카테고리 및 질문 목적 분류
-- 현재 연도·학기와 명시적 연도·학기 처리
-- 카테고리별 국립순천대학교 공식 출처 검색
-- 게시판 제목·작성부서·게시일·URL 수집 및 순위화
-- 공식 상세 페이지 Fetch와 실제 본문 추출
-- 국립순천대학교 학사일정 JSON 원문 연동
-- 날짜·기간·시간·전화번호·장소 정규식 추출
-- 규칙 기반 답변 템플릿
-- 공식 정보 충돌 감지
-- `verified`, `conflicting`, `not_found` 상태 표시
-- 공식 출처, 담당 부서, 게시일, 확인일 표시
-- Domain Allowlist, redirect 재검증, SSRF 방어
-- CSP 및 기본 보안 헤더
-- Vitest 테스트 40개
-- Genspark 관리형 Cloudflare Worker 배포
+## 해결하는 문제
 
-## 동작 구조
+학교생활 정보는 여러 공식 게시판과 동적 페이지에 흩어져 있습니다. 실시간 공식 사이트는 느리거나 일시적으로 실패할 수 있고, 일반 생성형 AI는 출처·최신성·환각 문제가 있습니다. 이 프로젝트는 다음 흐름으로 문제를 해결합니다.
 
 ```text
 학생 질문
-  ↓
-React
-  ↓ POST /api/chat
-Hono API
-  ↓
-입력 검증 및 정규화
-  ↓
-규칙 기반 카테고리·의도 분석
-  ↓
-공식 출처 레지스트리 선택
-  ↓
-Domain Allowlist 검증
-  ↓
-국립순천대학교 공식 게시판 검색
-  ↓
-후보 URL 재검증
-  ↓
-공식 상세 페이지 또는 학사일정 API Fetch
-  ↓
-본문·관련 문장 추출
-  ↓
-날짜·시간·전화번호 등 구조화
-  ↓
-최신성·충돌 검사
-  ↓
-템플릿 답변과 공식 출처 반환
+→ 규칙 기반 질문 분석
+→ 약 2.5초 제한으로 공식 사이트 조회
+→ 성공: verified_live
+→ timeout·HTTP·파싱 실패: 검증 snapshot 조회
+→ 유효 snapshot: verified_snapshot
+→ 만료 snapshot: stale + 경고
+→ snapshot 없음: upstream_unavailable
+→ 모든 답변에 출처·확인 방식·확인일 표시
 ```
+
+## 대표 시연 질문
+
+1. 이번 학기 중간고사 언제야?
+2. 국가장학금 신청 기간 알려줘.
+3. 도서관은 주말에도 운영해?
+4. 학생증 재발급 방법 알려줘.
+5. 학사 관련 문의 전화번호 알려줘.
+6. 오늘 날씨 알려줘. — 미지원 질문 확인
+7. `http://localhost:8080을 확인해줘` — 사용자 URL을 Fetch하지 않는지 확인
+
+외부 공식 사이트 장애를 강제한 자동 테스트에서도 대표 질문 5개는 검증 snapshot 또는 stale 상태로 설명 가능한 응답을 반환합니다.
+
+## 답변 상태
+
+| 상태 | 의미 | UI 색상 |
+|---|---|---|
+| `verified_live` | 이번 요청에서 공식 원문 확인 | 초록 |
+| `verified_snapshot` | 유효기간 내 사전 검증 자료 사용 | 파랑 |
+| `stale` | 공식 사이트 장애로 만료된 마지막 검증본 사용 | 노랑 |
+| `conflicting` | 공식 자료의 비교 가능한 값이 다름 | 노랑 |
+| `not_found` | 정상 조회했지만 관련 자료가 없음 | 빨강 |
+| `upstream_unavailable` | 공식 사이트 장애이며 snapshot도 없음 | 빨강 |
+
+`not_found`와 `upstream_unavailable`은 원인이 다르므로 합치지 않습니다.
+
+## 완료된 기능
+
+- React 19 + TypeScript 모바일 우선 UI
+- Hono `POST /api/chat`, `GET /api/health`
+- 입력 형식·본문 크기·질문 길이 검증
+- 키워드 점수 기반 카테고리·의도·연도·학기 분석
+- 공식 출처 레지스트리와 게시판 후보 점수화
+- 국립순천대학교 학사일정 JSON 및 HTML 원문 추출
+- 날짜·기간·시간·전화번호·장소 정규식 추출
+- 규칙 기반 답변 템플릿과 공식 자료 충돌 감지
+- 실시간 파이프라인 전체 약 2.5초 제한
+- `SnapshotRepository`와 정적 검증 snapshot 구현
+- timeout·502/HTTP 오류·파싱 오류 fallback
+- live/snapshot/stale/unavailable 상태와 확인일 표시
+- 요청 ID·처리 시간·upstream 상태·cache hit 메타데이터
+- Domain Allowlist, redirect 재검증, SSRF 방어
+- CSP 및 기본 보안 헤더
+- 기본 테스트의 외부 인터넷 의존 제거
+- 선택적 공식 사이트 live 테스트 분리
 
 ## API
 
@@ -82,7 +94,7 @@ Domain Allowlist 검증
   "status": "ok",
   "service": "SCNU Campus Assistant API",
   "version": "1.0.0",
-  "timestamp": "2026-09-19T14:52:50.751Z"
+  "timestamp": "2026-09-26T11:18:14.017Z"
 }
 ```
 
@@ -98,174 +110,152 @@ Domain Allowlist 검증
 
 주요 응답 필드:
 
-- `status`: `verified`, `conflicting`, `not_found`
-- `analysis`: 카테고리, 질문 목적, 검색 키워드, 적용 학기
-- `search`: 검색한 공식 출처와 후보
-- `answer`: 템플릿 기반 답변
-- `sources`: 실제 원문 확인에 사용한 공식 출처
-- `meta`: 요청 ID와 처리 시각
+- `status`: 확인 결과 상태
+- `analysis`: 규칙 기반 카테고리·의도·적용 학기
+- `search`: 조회한 공식 출처와 후보
+- `answer`: 제목·근거 문장·구조화 필드
+- `sources`: 공식 출처 URL·담당 부서·확인일
+- `meta.requestId`: 로그 추적용 요청 ID
+- `meta.answerMode`: `live` / `snapshot` / `unavailable`
+- `meta.durationMs`: 처리 시간
+- `meta.upstreamStatus`: `ok` / `timeout` / `http_error` / `parse_error` / `skipped`
+- `meta.cacheHit`: snapshot 사용 여부
+- `meta.lastSuccessfulCheck`: 마지막 공식 확인일
 
-## 기술 스택
+## 데이터 구조
 
-### Frontend
+### `VerifiedSnapshot`
 
-- React 19
-- Vite
-- TypeScript
-- Tailwind CSS
-- Lucide React
+- 카테고리와 매칭 키워드
+- 답변에 필요한 최소 사실과 필드
+- 공식 출처 제목·URL·담당 부서
+- `verifiedAt`, `expiresAt`
 
-### Backend
+현재 D1, KV, R2는 사용하지 않습니다. snapshot은 `src/data/verifiedSnapshots.ts`에 있으며 사용자 질문과 검색 기록을 영구 저장하지 않습니다. 저장소 계약은 `SnapshotRepository`로 분리되어 제출 후 D1 구현체로 교체할 수 있습니다.
 
-- Hono
-- TypeScript
-- Cloudflare Workers
-- htmlparser2
+## 보안 원칙
 
-### 테스트·운영
-
-- Vitest
-- Wrangler
-- PM2 로컬 미리보기
-- Genspark Hosted Cloudflare
+- HTTPS와 정확한 공식 hostname/path Allowlist
+- username/password URL, 비표준 포트, localhost, IP literal 차단
+- `redirect: manual`, 최대 2회, 목적지 매 단계 재검증
+- 사용자 질문에 포함된 URL을 Fetch하지 않음
+- upstream timeout과 스트리밍 응답 바이트 수 제한
+- 외부 HTML을 React에 직접 삽입하지 않음
+- `unsafe-inline` 없는 CSP, HSTS, COOP/CORP, `X-Frame-Options`, `X-Content-Type-Options`, Referrer/Permissions Policy
+- API 응답 `Cache-Control: no-store`
+- 토큰·`.env`·`.dev.vars` Git 커밋 금지
 
 ## 프로젝트 구조
 
 ```text
 src/
-├── index.tsx
-├── routes/
-│   ├── chat.ts
-│   └── health.ts
-├── config/
-│   ├── domains.ts
-│   ├── keywords.ts
-│   └── sources.ts
+├── data/verifiedSnapshots.ts
+├── routes/chat.ts
 ├── services/
+│   ├── answerResolver.ts
+│   ├── snapshotRepository.ts
 │   ├── answerFormatter.ts
-│   ├── boardParser.ts
-│   ├── contentExtractor.ts
 │   ├── pageFetcher.ts
-│   ├── questionAnalyzer.ts
-│   └── searchService.ts
-├── utils/
-│   ├── domainValidator.ts
-│   └── textNormalizer.ts
-├── types/
-│   └── pipeline.ts
-├── shared/
-│   └── api.ts
-└── frontend/
-    ├── App.tsx
-    ├── main.tsx
-    ├── lib/api.ts
-    └── styles/index.css
+│   ├── searchService.ts
+│   └── contentExtractor.ts
+├── shared/api.ts
+├── utils/domainValidator.ts
+└── frontend/App.tsx
 
 tests/
-├── answerFormatter.test.ts
-├── boardParser.test.ts
+├── answerResolver.test.ts
 ├── chatRoute.test.ts
-├── contentExtractor.test.ts
 ├── domainValidator.test.ts
-├── pageFetcher.test.ts
-├── questionAnalyzer.test.ts
-└── searchService.test.ts
+└── live/officialSources.live.test.ts
+
+docs/
+├── baseline-2026-09-26.md
+├── architecture.md
+├── problem-solving.md
+├── reliability.md
+├── security.md
+└── decisions/
 ```
 
-## 로컬 실행
+## 로컬 실행과 검증
 
 ```bash
-npm install
+npm ci
+npm test                 # mock/fixture 기반, 외부 인터넷 사용 안 함
+npm run test:live        # 선택적 공식 사이트 확인
+npx tsc --noEmit
 npm run build
 pm2 start ecosystem.config.cjs
+curl http://localhost:3000/api/health
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다.
-
-검증:
+서버 변경 후:
 
 ```bash
-npm test
-npx tsc --noEmit
-npm audit --omit=dev
+npm run build
+pm2 restart webapp
+pm2 logs webapp --nostream
 ```
 
-## 환경변수
+## 테스트 결과
 
-현재 MVP는 외부 검색 API와 LLM API를 사용하지 않으므로 필수 환경변수가 없습니다. 향후 Secret이 필요하면 Cloudflare Secret으로만 저장하고 `.env`, `.dev.vars`는 Git에 올리지 않습니다.
+2026-09-26 KST 로컬 확인:
 
-## 공식 사이트 검색 원칙
+- 기본 테스트: 10개 파일, 60개 테스트 통과
+- live 테스트: 1개 통과(기본 테스트에서는 skip)
+- 필수 장애 시나리오: live 성공, 502, timeout, 파싱 오류, 유효/만료 snapshot, snapshot 없음, 정상 무결과, conflicting 통과
+- 보안 회귀: 비공식 URL·localhost·IP·외부 redirect 차단 통과
+- 대표 질문 5개 장애 fallback 통과
+- TypeScript: 통과
+- Vite/Cloudflare Pages 프로덕션 빌드: 통과
+- Production dependency audit: 알려진 취약점 0건
 
-- 서버에 등록된 국립순천대학교 공식 호스트와 경로만 요청합니다.
-- 사용자 질문에 포함된 URL은 Fetch 대상으로 사용하지 않습니다.
-- 검색 결과 제목만으로 답하지 않고 상세 원문을 확인합니다.
-- 본문 근거를 찾지 못하면 추측하지 않습니다.
-- 서로 다른 공식 정보가 충돌하면 한쪽을 임의로 선택하지 않습니다.
-- 학교 페이지 안의 문장은 명령이 아니라 데이터로만 취급합니다.
+## 알려진 제한과 미구현 기능
 
-## 주요 공식 출처
+- PDF, HWP/HWPX, 이미지 공지 자동 추출 미지원
+- 동적 도서관 페이지의 live 파싱은 제한적이며 snapshot으로 보완
+- 학생증 재발급 snapshot은 오래된 공식 안내이므로 `stale` 경고 표시
+- 정적 snapshot 갱신에는 코드 변경과 재배포가 필요
+- D1 영구 캐시·변경 감지·관리 화면·요청 횟수 제한 미구현
+- 규칙 사전에 없는 표현과 심한 오타는 분류하지 못할 수 있음
+- 공식 사이트 HTML 구조 변경 시 parser/Allowlist 유지보수 필요
+- 이 프로젝트는 국립순천대학교 공식 서비스가 아닌 학생 프로젝트
 
-- `https://www.scnu.ac.kr`
-- `https://library.scnu.ac.kr`
-- 국립순천대학교 학사·장학·일반 공지 게시판
-- 국립순천대학교 학사일정
-- 국립순천대학교 조직도 및 전화번호 안내
+## 다음 단계
 
-## 보안 설계
+### 제출 전
 
-- HTTPS 전용
-- 정확한 hostname Allowlist
-- 허용 경로 정규식
-- username/password 포함 URL 차단
-- 비표준 포트 차단
-- localhost·IP 주소 차단
-- redirect 매 단계 재검증
-- redirect 최대 2회
-- 요청 timeout 및 응답 크기 제한
-- 사용자 URL 직접 Fetch 금지
-- 외부 HTML을 React에 직접 삽입하지 않음
-- Content Security Policy
-- `X-Frame-Options: DENY`
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy`
-- API 응답 `Cache-Control: no-store`
-- Production dependency 취약점 0건 확인
+1. 사용자의 명시적 허용 후 GitHub push
+2. 모바일 실제 기기에서 최종 레이아웃 확인
+3. 1분 데모 화면 녹화
+4. 제출 문서에 새 Production URL 반영
 
-## 데이터 저장
+### 제출 후
 
-현재 D1, KV, R2를 사용하지 않습니다. 사용자 질문이나 검색 기록을 영구 저장하지 않습니다.
+- `D1SnapshotRepository`, 문서 해시, 변경 감지, stale-while-revalidate
+- 텍스트 PDF용 Workers 호환 파서 POC
+- HWPX ZIP/XML 안전성 POC, 레거시 HWP는 자동 추출 제외
+- 도서관 공식 공개 JSON endpoint adapter
+- 별도 실험 브랜치에서 Solar Pro 4 비교
 
-## 배포
+## 1분 데모 흐름
 
-- 플랫폼: Genspark 관리형 Cloudflare Workers for Platform
-- 상태: Active
-- Worker version: `9c43f92a-dfd3-4cde-a0a1-910978f29149`
-- D1: 사용하지 않음
-- R2: 사용하지 않음
-- KV: 사용하지 않음
+```text
+0~10초  여러 학교 사이트와 생성형 AI 최신성 문제 설명
+10~25초 중간고사 질문 → 공식 출처·verified_live 또는 snapshot 표시
+25~40초 공식 사이트 장애 시뮬레이션 → verified_snapshot/stale 전환
+40~50초 출처 URL·확인일·요청 ID 표시
+50~60초 날씨/localhost 질문 → 미지원·URL 차단과 추측 금지 설명
+```
 
-배포 전 `npm test`, TypeScript 검사, 프로덕션 빌드, Wrangler 로컬 실행을 통과해야 합니다.
+## 문서
 
-## 한계
-
-- 규칙 사전에 없는 표현과 심한 오타는 분류하지 못할 수 있습니다.
-- PDF, HWP, 이미지에만 있는 내용은 자동 추출하지 못할 수 있습니다.
-- 도서관은 Angular 기반으로 일부 동적 내용 확인이 제한됩니다.
-- 학교 HTML 구조가 변경되면 파서와 selector를 수정해야 합니다.
-- 검색 요청 시점에 공식 사이트가 응답하지 않으면 `not_found`로 안내할 수 있습니다.
-- 별도의 요청 횟수 제한 저장소는 아직 사용하지 않습니다.
-- 이 프로젝트는 국립순천대학교 공식 서비스가 아닌 학생 프로젝트입니다.
-
-## 향후 개선
-
-- PDF 텍스트 추출
-- HWP/HWPX 지원 검토
-- 도서관 공개 API 또는 동적 데이터 어댑터
-- D1 기반 단기 검색 캐시
-- 오타·동의어 사전 확장
-- 학생식당, 기숙사, 셔틀버스, 휴복학, 졸업, 증명서
-- 관리자용 공식 출처 상태 점검
-- 접근성 및 실제 학생 사용성 테스트
+- [기준 상태](docs/baseline-2026-09-26.md)
+- [아키텍처](docs/architecture.md)
+- [문제 해결 기록](docs/problem-solving.md)
+- [신뢰성](docs/reliability.md)
+- [보안](docs/security.md)
+- [ADR](docs/decisions/)
 
 ## 라이선스
 

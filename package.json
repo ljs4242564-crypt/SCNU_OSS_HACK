@@ -5,6 +5,7 @@
     "dev": "vite",
     "build": "vite build --mode client && vite build",
     "test": "vitest run",
+    "test:live": "RUN_LIVE_TESTS=1 vitest run tests/live",
     "preview": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
     "deploy": "npm run build && wrangler pages deploy dist",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"

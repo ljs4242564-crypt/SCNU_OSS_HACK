@@ -17,6 +17,17 @@ describe('extractStructuredInformation', () => {
     expect(result.phones).toContain('061-750-3061')
   })
 
+  it('두 자리 연도를 월로 잘못 해석하지 않는다', () => {
+    const result = extractStructuredInformation(
+      '국가장학금 2차 신청 ’26. 8. 12.(수) 9시 ~ 9. 9.(수) 18시',
+      2026,
+    )
+
+    expect(result.dates).not.toContain('2026-26-08')
+    expect(result.dates).toContain('2026-08-12')
+    expect(result.dates).toContain('2026-09-09')
+  })
+
   it('전화번호가 있는 조직도 행을 연락처 근거로 선택한다', () => {
     const candidate: SearchCandidate = {
       sourceId: 'directory', sourceName: '전화번호 안내', title: '학생지원과 전화번호',
