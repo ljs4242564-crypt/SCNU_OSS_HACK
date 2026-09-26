@@ -5,8 +5,23 @@ export interface SnapshotRepository {
   findBest(analysis: QuestionAnalysis): Promise<VerifiedSnapshot | null>
 }
 
-function includesKeyword(value: string, keyword: string) {
-  return value.toLocaleLowerCase('ko-KR').includes(keyword.toLocaleLowerCase('ko-KR'))
+function normalizeMatchTerm(value: string) {
+  return value.toLocaleLowerCase('ko-KR').replace(/\s+/g, ' ').trim()
+}
+
+function matchesRule(snapshot: VerifiedSnapshot, analysis: QuestionAnalysis) {
+  if (!snapshot.match.intents.includes(analysis.intent)) return false
+
+  const analysisTerms = new Set(
+    [...analysis.matchedKeywords, ...analysis.searchKeywords].map(normalizeMatchTerm),
+  )
+  const hasTerm = (term: string) => analysisTerms.has(normalizeMatchTerm(term))
+
+  if (snapshot.match.excluded?.some(hasTerm)) return false
+  if (snapshot.match.requiredAll?.some((term) => !hasTerm(term))) return false
+  if (snapshot.match.requiredAny && !snapshot.match.requiredAny.some(hasTerm)) return false
+
+  return true
 }
 
 export class StaticSnapshotRepository implements SnapshotRepository {
@@ -15,21 +30,9 @@ export class StaticSnapshotRepository implements SnapshotRepository {
   async findBest(analysis: QuestionAnalysis) {
     if (!analysis.supported || analysis.ambiguous) return null
 
-    const matches = this.snapshots
-      .filter((snapshot) => snapshot.category === analysis.category)
-      .map((snapshot) => ({
-        snapshot,
-        score: snapshot.keywords.reduce(
-          (total, keyword) => total + (analysis.matchedKeywords.some((matched) =>
-            includesKeyword(matched, keyword) || includesKeyword(keyword, matched),
-          ) ? 3 : 0),
-          0,
-        ),
-      }))
-      .filter(({ score }) => score > 0)
-      .sort((left, right) => right.score - left.score)
-
-    return matches[0]?.snapshot ?? null
+    return this.snapshots.find(
+      (snapshot) => snapshot.category === analysis.category && matchesRule(snapshot, analysis),
+    ) ?? null
   }
 }
 

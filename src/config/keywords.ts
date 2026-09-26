@@ -61,7 +61,7 @@ export const CATEGORY_RULES: CategoryRule[] = [
     strongKeywords: [
       '전화번호', '연락처', '담당부서', '담당 부서', '문의처', '조직도', '부서전화',
     ],
-    relatedKeywords: ['전화', '문의', '어디로', '담당자', '부서', '연락'],
+    relatedKeywords: ['학사', '교무학사과', '전화', '문의', '어디로', '담당자', '부서', '연락'],
     searchTerms: ['전화번호 안내', '담당 부서'],
   },
 ]
@@ -75,7 +75,7 @@ export const INTENT_RULES: IntentRule[] = [
   {
     id: 'hours',
     label: '운영시간 문의',
-    patterns: ['운영시간', '이용시간', '몇 시', '몇시', '언제 열', '언제 닫', '개관', '폐관'],
+    patterns: ['운영시간', '이용시간', '몇 시', '몇시', '언제 열', '언제 닫', '개관', '폐관', '주말', '운영'],
   },
   {
     id: 'application',

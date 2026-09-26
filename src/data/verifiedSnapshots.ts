@@ -1,9 +1,16 @@
-import type { AnswerField, QuestionCategory } from '../shared/api'
+import type { AnswerField, QuestionCategory, QuestionIntent } from '../shared/api'
+
+export type SnapshotMatchRule = {
+  intents: QuestionIntent[]
+  requiredAll?: string[]
+  requiredAny?: string[]
+  excluded?: string[]
+}
 
 export type VerifiedSnapshot = {
   id: string
   category: QuestionCategory
-  keywords: string[]
+  match: SnapshotMatchRule
   title: string
   content: string
   fields: AnswerField[]
@@ -20,7 +27,10 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'academic-midterm-2026-2',
     category: 'academic',
-    keywords: ['중간고사', '중간시험', '시험', '학기'],
+    match: {
+      intents: ['schedule'],
+      requiredAny: ['중간고사', '중간시험'],
+    },
     title: '2026학년도 제2학기 중간시험',
     content: '국립순천대학교 학사일정에서 제2학기 중간시험은 2026년 10월 19일부터 10월 23일까지로 확인되었습니다.',
     fields: [
@@ -36,7 +46,11 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'scholarship-national-2026-2-second',
     category: 'scholarship',
-    keywords: ['국가장학금', '장학금', '신청', '2차'],
+    match: {
+      intents: ['application'],
+      requiredAll: ['국가장학금'],
+      excluded: ['교내장학금', '근로장학금', '근로장학', '교외장학금', '외부장학금'],
+    },
     title: '2026학년도 2학기 국가장학금 2차 신청 안내',
     content: '2차 신청 기간은 2026년 8월 12일 09:00부터 9월 9일 18:00까지였습니다. 현재는 안내된 신청 기간이 지났으므로 새 공지를 확인해야 합니다.',
     fields: [
@@ -52,12 +66,18 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'library-hours-2026-09',
     category: 'library',
-    keywords: ['도서관', '운영시간', '이용시간', '주말', '열람실'],
-    title: '국립순천대학교 도서관 시설 이용시간',
-    content: '공식 도서관 이용시간 자료에는 시설별 시간이 다르게 안내됩니다. 확인 당시 학습관 2층·4층 열람 공간은 06:00~24:00, 자료관 1~3층은 09:00~20:00(수요일 18:00까지)로 게시되어 있었습니다. 주말·방학·시험기간에는 적용 시간이 달라질 수 있어 방문 전 공식 페이지의 현재 탭을 다시 확인하세요.',
+    match: {
+      intents: ['hours'],
+      requiredAny: ['운영시간', '이용시간', '주말', '열람실', '개관', '휴관', '몇 시', '몇시'],
+      excluded: ['위치', '대출', '반납', '예약', '좌석', '분실'],
+    },
+    title: '국립순천대학교 도서관 주말 시설 이용시간',
+    content: '주말에는 일부 시설만 운영합니다. 자료관은 주말 및 법정공휴일에 휴관하고, 학습관 1층·3층 일부 시설도 주말에 휴관합니다. 학습관 2층 201·202 열람실과 We 라운지, 학습관 4층 401·402 열람실과 개인캐럴은 06:00~24:00 연중무휴로 안내되어 있습니다.',
     fields: [
-      { label: '학습관 2층·4층', value: '06:00 ~ 24:00' },
-      { label: '자료관 1~3층', value: '09:00 ~ 20:00 · 수요일 18:00까지' },
+      { label: '주말 운영', value: '일부 시설만 운영' },
+      { label: '학습관 2층', value: '201·202 열람실·We 라운지 06:00 ~ 24:00 · 연중무휴' },
+      { label: '학습관 4층', value: '401·402 열람실·개인캐럴 06:00 ~ 24:00 · 연중무휴' },
+      { label: '주말 휴관', value: '자료관 및 학습관 1층·3층 일부 시설' },
     ],
     sourceTitle: '국립순천대학교 도서관 이용시간',
     sourceUrl: 'https://library.scnu.ac.kr/facility/avaliable-time',
@@ -68,12 +88,16 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'student-card-reissue-last-verified',
     category: 'student_support',
-    keywords: ['학생증', '재발급', '발급'],
+    match: {
+      intents: ['procedure'],
+      requiredAll: ['학생증', '재발급'],
+    },
     title: '학생증 재발급 마지막 확인 자료',
-    content: '공식 학생증 발급 안내에서 실물 학생증 재발급 수수료는 5천 원으로 확인되었습니다. 오래된 안내이므로 신청 장소와 준비물은 학생지원과에 최신 절차를 다시 확인하세요.',
+    content: '공식 학생증 안내에는 일반 학생증 재발급 수수료 3천 원, 교통카드·현금입출납 기능이 있는 IC 학생증은 카드 구입 수수료 5천 원으로 구분되어 있습니다. 이 snapshot의 기준 안내는 오래되었으므로 방문 전 학생지원과에 최신 절차와 비용을 다시 확인하세요.',
     fields: [
-      { label: '재발급 수수료', value: '5,000원' },
-      { label: '최신 절차 확인', value: '학생지원과 문의' },
+      { label: '일반 학생증 재발급', value: '3,000원' },
+      { label: 'IC 학생증 카드 구입', value: '5,000원' },
+      { label: '최신 절차 확인', value: '학생지원과 061-750-3062' },
     ],
     sourceTitle: '2024학년도 학부·대학원 신입생 및 편입생 학생증 발급 안내',
     sourceUrl: 'https://www.scnu.ac.kr/SCNU/na/ntt/selectNttInfo.do?nttSn=281210005&mi=1131',
@@ -84,17 +108,22 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'academic-contact-2026',
     category: 'contact',
-    keywords: ['학사', '교무학사과', '문의', '전화', '전화번호', '연락처'],
-    title: '교무학사과 학사 문의 연락처',
-    content: '2026년 국립순천대학교 공식 학사 문의 답변에서 교무학사과 연락처는 061-750-3033으로 안내되었습니다. 수업 등 세부 업무는 담당 번호가 다를 수 있습니다.',
+    match: {
+      intents: ['contact'],
+      requiredAny: ['학사', '교무학사과'],
+    },
+    title: '교무학사과 업무별 학사 문의 연락처',
+    content: '학사 문의는 업무별 담당 번호가 다릅니다. 수강신청·수업·시험은 061-750-3032, 학적·등록·휴학·복학·전과는 061-750-3033, 졸업·다전공·재입학은 061-750-3035, 성적·계절학기·전자출결은 061-750-3036으로 안내되어 있습니다.',
     fields: [
-      { label: '학사 문의', value: '061-750-3033' },
-      { label: '담당', value: '교무학사과 학사지원팀' },
+      { label: '수강신청·수업·시험', value: '061-750-3032' },
+      { label: '학적·등록·휴학·복학·전과', value: '061-750-3033' },
+      { label: '졸업·다전공·재입학', value: '061-750-3035' },
+      { label: '성적·계절학기·전자출결', value: '061-750-3036' },
     ],
-    sourceTitle: '국립순천대학교 학사 문의 공식 답변',
-    sourceUrl: 'https://www.scnu.ac.kr/SCNU/na/ntt/selectNttInfo.do?nttSn=281316492',
-    department: '교무학사과 학사지원팀',
-    verifiedAt: '2026-08-06',
+    sourceTitle: '국립순천대학교 조직도 - 교무처',
+    sourceUrl: 'https://www.scnu.ac.kr/SCNU/og/organiz/selectOrganizList.do?menuCode=A&mi=1214&prntDeptCode=2',
+    department: '교무학사과(학사)',
+    verifiedAt: '2026-09-26',
     expiresAt: '2026-12-31',
   },
 ]
