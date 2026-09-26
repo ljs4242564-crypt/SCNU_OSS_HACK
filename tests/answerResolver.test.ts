@@ -71,6 +71,32 @@ describe('resolveAnswer', () => {
     expect(result.cacheHit).toBe(false)
   })
 
+  it('requestId 문맥을 검색과 원문 조회 계층에 전달한다', async () => {
+    const context = { requestId: 'request-context-test' }
+    const searcher = vi.fn(async () => completedSearch)
+    const documentFetcher = vi.fn(async () => [document()])
+
+    await resolveAnswer(academicAnalysis(), {
+      searcher,
+      documentFetcher,
+      snapshotRepository: noSnapshotRepository,
+      context,
+      now: () => now,
+    })
+
+    expect(searcher).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ context }),
+    )
+    expect(documentFetcher).toHaveBeenCalledWith(
+      completedSearch,
+      expect.any(Object),
+      expect.any(Function),
+      expect.any(AbortSignal),
+      context,
+    )
+  })
+
   it('502 오류에서 유효 snapshot으로 전환한다', async () => {
     const result = await resolveAnswer(academicAnalysis(), {
       searcher: failingSearch,
@@ -175,5 +201,57 @@ describe('resolveAnswer', () => {
     expect(['verified_snapshot', 'stale']).toContain(result.status)
     expect(result.sources[0]?.url).toMatch(/^https:\/\/(?:www\.)?(?:scnu\.ac\.kr|library\.scnu\.ac\.kr)/)
     expect(result.lastSuccessfulCheck).not.toBeNull()
+  })
+
+  it('도서관 주말 snapshot은 운영·휴관 시설을 구분한다', async () => {
+    const result = await resolveAnswer(analyzeQuestion('도서관은 주말에도 운영해?', now), {
+      searcher: failingSearch,
+      snapshotRepository: new StaticSnapshotRepository(),
+      now: () => now,
+    })
+
+    expect(result.content).toContain('일부 시설만 운영')
+    expect(result.content).toContain('자료관은 주말 및 법정공휴일에 휴관')
+    expect(result.content).toContain('201·202 열람실')
+    expect(result.content).toContain('401·402 열람실')
+    expect(result.content).toContain('연중무휴')
+  })
+
+  it('넓은 학사 문의 snapshot은 업무별 번호를 함께 안내한다', async () => {
+    const result = await resolveAnswer(analyzeQuestion('학사 관련 문의 전화번호 알려줘.', now), {
+      searcher: failingSearch,
+      snapshotRepository: new StaticSnapshotRepository(),
+      now: () => now,
+    })
+
+    expect(result.fields).toEqual(expect.arrayContaining([
+      { label: '수강신청·수업·시험', value: '061-750-3032' },
+      { label: '학적·등록·휴학·복학·전과', value: '061-750-3033' },
+      { label: '졸업·다전공·재입학', value: '061-750-3035' },
+      { label: '성적·계절학기·전자출결', value: '061-750-3036' },
+    ]))
+    expect(result.sources[0]?.url).toContain('/og/organiz/selectOrganizList.do')
+  })
+
+  it.each([
+    '도서관에서 책 빌리는 방법 알려줘',
+    '도서관 위치 알려줘',
+    '도서관 좌석 예약 방법 알려줘',
+    '교내장학금 신청 방법 알려줘',
+    '근로장학금 모집 기간 알려줘',
+    '외부장학금 알려줘',
+    '학생증을 처음 발급받는 방법 알려줘',
+    '성적 문의 전화번호 알려줘',
+  ])('관련 없는 같은 카테고리 질문에는 snapshot을 반환하지 않는다: %s', async (question) => {
+    const result = await resolveAnswer(analyzeQuestion(question, now), {
+      searcher: failingSearch,
+      snapshotRepository: new StaticSnapshotRepository(),
+      now: () => now,
+    })
+
+    expect(result.status).toBe('upstream_unavailable')
+    expect(result.answerMode).toBe('unavailable')
+    expect(result.cacheHit).toBe(false)
+    expect(result.sources).toEqual([])
   })
 })
