@@ -16,9 +16,17 @@ describe('security headers', () => {
     expect(csp).not.toContain("'unsafe-inline'")
   })
 
-  it('API 응답을 브라우저와 중간 캐시에 저장하지 않는다', async () => {
+  it('API 응답을 브라우저와 중간 캐시에 저장하지 않고 배포 식별자를 제공한다', async () => {
     const response = await app.request('/api/health')
+    const body = await response.json() as Record<string, unknown>
+
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(response.headers.get('content-type')).toContain('application/json')
+    expect(body).toMatchObject({
+      status: 'ok',
+      appVersion: '1.1.0',
+      releaseId: '2026-09-26-corrective-1',
+    })
+    expect(body.builtAt).toMatch(/^2026-09-26T/)
   })
 })

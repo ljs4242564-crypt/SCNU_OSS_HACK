@@ -142,6 +142,8 @@ export type ChatResponse = ChatSuccessResponse | ApiErrorResponse
 export type HealthResponse = {
   status: 'ok'
   service: 'SCNU Campus Assistant API'
-  version: string
+  appVersion: string
+  releaseId: string
+  builtAt: string
   timestamp: string
 }
