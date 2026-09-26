@@ -73,3 +73,25 @@
 - 선택한 해결책: 실패 종류와 HTTP 상태를 구조화해 이후 로그로 근거를 남긴다.
 - 검증 방법과 결과: 로컬 fixture와 선택적 live 테스트를 분리한다.
 - 남은 한계: 실제 Worker 환경 차이는 배포 후 재검증해야 한다.
+
+## 7. 넓은 snapshot 키워드가 같은 카테고리의 다른 질문에 오답을 반환함
+
+- 문제: 공식 사이트 조회 실패 시 질문과 주제가 다른 snapshot이 답으로 선택되었다.
+- 재현 질문 또는 명령: `도서관에서 책 빌리는 방법 알려줘`, `도서관 위치 알려줘`, `교내장학금 신청 방법 알려줘`, `근로장학금 모집 기간 알려줘`를 upstream 실패 조건에서 실행한다. 교정 전 공개 배포에서도 2026-09-26 22:38 KST에 동일 문제가 재현되었다.
+- 원인: `snapshotRepository.ts`가 카테고리 일치 후 `matchedKeywords`와 snapshot 키워드를 양방향 부분 문자열로 비교하고, 점수가 0보다 크면 가장 높은 항목을 반환했다.
+- 실패한 설계: 카테고리가 같고 `도서관` 또는 `장학금` 같은 넓은 단어 하나만 겹쳐도 해당 카테고리의 대표 snapshot을 안전한 fallback으로 간주했다. 이 방식은 “답이 없음”보다 관련 없는 답을 선택했다.
+- 선택한 수정: snapshot마다 허용 `intent`, `requiredAll`, `requiredAny`, `excluded` 규칙을 선언했다. 분석된 용어를 정확히 비교하고, 모든 조건을 충족한 항목만 반환하며 일치 항목이 없으면 `null`로 처리한다.
+- 자동 테스트: `tests/answerResolver.test.ts`에 대표 질문 5개 fallback과 오매칭 방지 질문 8개를 함께 실행한다. `npm test`에서 교정 후 기본 테스트 71개가 통과했다.
+- 수정 전후 결과: 수정 전에는 도서관 위치 질문이 운영시간 snapshot을, 교내장학금 질문이 국가장학금 snapshot을 받았다. 수정 후 upstream 실패 시 모두 `upstream_unavailable`, `answerMode: unavailable`, `cacheHit: false`, 빈 출처를 반환한다.
+- 남은 한계: 엄격한 규칙 사전에 없는 동의어와 심한 오타는 올바른 snapshot이 있어도 사용하지 못할 수 있다. 오답 방지를 위해 이 경우에는 추측 대신 unavailable을 선택한다.
+
+## 8. 공식 사이트 fallback과 호스팅 플랫폼 전체 장애는 다른 장애 계층임
+
+- 문제: 앱 내부 fallback은 국립순천대학교 upstream의 timeout·HTTP·파싱 실패를 처리하지만, Genspark 호스팅 자체가 `Site Unavailable`을 반환하면 앱 코드와 `/api/health`, `/api/chat`이 실행되지 않는다.
+- 재현 질문 또는 명령: `curl -L -D - <배포 URL>/`, `curl -L -D - <배포 URL>/api/health`, `curl -X POST -H 'Content-Type: application/json' --data '{"question":"이번 학기 중간고사 언제야?"}' <배포 URL>/api/chat`으로 status, Content-Type, body marker를 함께 검사한다.
+- 원인: 학교 공식 사이트 장애는 애플리케이션 내부 신뢰성 경계 안에 있지만, 관리형 호스팅의 라우팅·Worker 가용성 문제는 앱이 실행되기 전의 외부 계층이다. 2026-09-26 밤의 플랫폼 장애에 대한 내부 원인은 현재 저장소 자료만으로는 확인할 수 없어 `추가 확인 필요`다.
+- 실패한 설계: HTTP 200만 확인해 플랫폼 오류 HTML을 정상 앱으로 판정했고, 내부 snapshot fallback이 있으면 공개 서비스도 항상 열릴 것으로 가정했다.
+- 선택한 수정: 배포 smoke test에 앱 title marker, `Site Unavailable` 부재, Health JSON과 `status: ok`, Chat JSON을 포함한다. Health에 배포 버전 식별자를 추가한 뒤 기대 commit과 비교하고, 관리형 배포가 계속 실패하면 다른 Cloudflare 배포 경로나 정적 백업/데모 영상을 준비한다.
+- 자동 테스트: 로컬 테스트는 upstream 장애에서 snapshot/unavailable 전환을 검증한다. 호스팅 계층은 배포 후 curl 기반 smoke test로 별도 검증하며, 하나라도 실패하면 배포 완료로 판정하지 않는다.
+- 수정 전후 결과: 이전 점검에서는 루트와 Health가 HTTP 200 HTML `Site Unavailable`, Chat이 405였다. 2026-09-26 22:38 KST에는 기존 URL이 복구되었지만 오매칭이 계속 재현되었다. 2026-09-26 23:02 KST 새 관리형 배포에서는 앱 HTML, Health JSON, Chat JSON과 `releaseId: 2026-09-26-corrective-1`을 확인했고, 도서관 대출·위치 질문은 관련 없는 snapshot 없이 `upstream_unavailable`을 반환했다.
+- 남은 한계: 같은 Genspark 플랫폼의 이전 URL은 독립 장애 격리가 되지 않는다. 현재 독립 백업 URL과 1분 데모 영상은 준비되지 않았으며 제출 전 별도로 마련해야 한다.

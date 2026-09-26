@@ -6,23 +6,28 @@
 
 ## 현재 상태
 
-- 로컬 구현: Phase 0~4 완료
-- 기준 브랜치/원격 커밋: `main` / `9faf57e`
-- 로컬 테스트: **60개 통과**, 선택적 live 테스트 1개 분리
+2026-09-26 23:02 KST 기준입니다.
+
+- 기준 브랜치: `main`
+- 배포 런타임 코드 기준 GitHub 커밋: `f9a9fd84dcf1d55eb0720a1e3e488c0434eef6e9`
+- GitHub push: 교정 코드 4개 커밋까지 완료, 이 현재 상태 문서를 5번째 커밋으로 동기화
+- 로컬 테스트: **71개 통과**, 선택적 live 테스트 1개 통과
 - 타입 검사·프로덕션 빌드: 통과
-- 로컬 미리보기: `http://localhost:3000`
-- Genspark 관리형 Cloudflare 배포: 2026-09-26 완료 및 검증
-- Worker 버전: `b19cfbbb-45d7-4eaa-82a4-05a78c28717d`
-- GitHub push: 아직 수행하지 않음
+- 현재 Genspark 배포: 루트 앱, Health JSON, Chat JSON 정상 동작
+- 배포 식별자: `appVersion 1.1.0` / `releaseId 2026-09-26-corrective-1`
+- Worker 버전: `706a56ba-9b49-4d4b-94e9-c67ebdc7e7c9`
+- 오매칭 방지: 공개 URL에서 도서관 대출·위치 질문은 `upstream_unavailable`; 교내·근로장학금은 관련 공식 live 답변으로 검증
+- 독립 백업·1분 데모 영상: 아직 준비되지 않음. 이전 URL은 접속 가능하지만 같은 호스팅 플랫폼이므로 독립 백업으로 간주하지 않음
 
 ## URL
 
-- **Production**: https://522a274e-b8bf-4c02-86be-41421d46a017.vip.gensparksite.com/
-- **Health API**: https://522a274e-b8bf-4c02-86be-41421d46a017.vip.gensparksite.com/api/health
-- 이전 배포 URL: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com/
+- **Production**: https://122fe1d3-47d9-4b5c-aab4-077aa08453d2.vip.gensparksite.com/
+- **Health API**: https://122fe1d3-47d9-4b5c-aab4-077aa08453d2.vip.gensparksite.com/api/health
+- 직전 배포 URL: https://522a274e-b8bf-4c02-86be-41421d46a017.vip.gensparksite.com/ — 교정 전 오매칭이 남아 있어 백업으로 사용하지 않음
+- 초기 배포 URL: https://f696bebe-457f-4f4c-842e-5b16b675cd34.vip.gensparksite.com/ — 같은 플랫폼의 과거 배포
 - GitHub: https://github.com/ljs4242564-crypt/SCNU_OSS_HACK
 
-배포 성공은 HTTP 200만으로 판단하지 않습니다. 루트가 실제 앱 HTML인지, `/api/health`가 `application/json`과 `status: ok`를 반환하는지 함께 확인합니다.
+배포 성공은 HTTP 200만으로 판단하지 않습니다. 루트가 실제 앱 HTML인지, `/api/health`가 `application/json`과 `status: ok` 및 기대 `releaseId`를 반환하는지, `POST /api/chat`이 JSON을 반환하는지 함께 확인합니다. 현재 URL은 2026-09-26 23:02 KST에 루트·Health·Chat·대표 질문·오매칭 방지 질문·보안 헤더 검사를 통과했습니다.
 
 ## 해결하는 문제
 
@@ -33,7 +38,7 @@
 → 규칙 기반 질문 분석
 → 약 2.5초 제한으로 공식 사이트 조회
 → 성공: verified_live
-→ timeout·HTTP·파싱 실패: 검증 snapshot 조회
+→ timeout·HTTP·파싱 실패: 의도와 질문 주제가 모두 일치하는 검증 snapshot만 조회
 → 유효 snapshot: verified_snapshot
 → 만료 snapshot: stale + 경고
 → snapshot 없음: upstream_unavailable
@@ -77,9 +82,11 @@
 - 규칙 기반 답변 템플릿과 공식 자료 충돌 감지
 - 실시간 파이프라인 전체 약 2.5초 제한
 - `SnapshotRepository`와 정적 검증 snapshot 구현
+- 의도·필수어·제외어 기반의 엄격한 snapshot 주제 매칭
 - timeout·502/HTTP 오류·파싱 오류 fallback
 - live/snapshot/stale/unavailable 상태와 확인일 표시
 - 요청 ID·처리 시간·upstream 상태·cache hit 메타데이터
+- route부터 공식 출처 네트워크 계층까지 동일한 requestId 진단 로그
 - Domain Allowlist, redirect 재검증, SSRF 방어
 - CSP 및 기본 보안 헤더
 - 기본 테스트의 외부 인터넷 의존 제거
@@ -93,8 +100,10 @@
 {
   "status": "ok",
   "service": "SCNU Campus Assistant API",
-  "version": "1.0.0",
-  "timestamp": "2026-09-26T11:18:14.017Z"
+  "appVersion": "1.1.0",
+  "releaseId": "2026-09-26-corrective-1",
+  "builtAt": "2026-09-26T13:39:00.000Z",
+  "timestamp": "2026-09-26T13:40:00.000Z"
 }
 ```
 
@@ -126,7 +135,7 @@
 
 ### `VerifiedSnapshot`
 
-- 카테고리와 매칭 키워드
+- 카테고리, 허용 의도, 필수어(`requiredAll`/`requiredAny`), 제외어
 - 답변에 필요한 최소 사실과 필드
 - 공식 출처 제목·URL·담당 부서
 - `verifiedAt`, `expiresAt`
@@ -199,13 +208,15 @@ pm2 logs webapp --nostream
 
 ## 테스트 결과
 
-2026-09-26 KST 로컬 확인:
+2026-09-26 22:38 KST 로컬 확인:
 
-- 기본 테스트: 10개 파일, 60개 테스트 통과
+- 기본 테스트: 10개 파일, 72개 테스트 통과
 - live 테스트: 1개 통과(기본 테스트에서는 skip)
 - 필수 장애 시나리오: live 성공, 502, timeout, 파싱 오류, 유효/만료 snapshot, snapshot 없음, 정상 무결과, conflicting 통과
 - 보안 회귀: 비공식 URL·localhost·IP·외부 redirect 차단 통과
 - 대표 질문 5개 장애 fallback 통과
+- 동일 카테고리 오매칭 방지 질문 8개가 장애 시 `upstream_unavailable`을 반환하는 회귀 테스트 통과
+- requestId가 route → resolver → 검색·원문 조회 문맥으로 전달되는 테스트 통과
 - TypeScript: 통과
 - Vite/Cloudflare Pages 프로덕션 빌드: 통과
 - Production dependency audit: 알려진 취약점 0건
@@ -213,11 +224,12 @@ pm2 logs webapp --nostream
 ## 알려진 제한과 미구현 기능
 
 - PDF, HWP/HWPX, 이미지 공지 자동 추출 미지원
-- 동적 도서관 페이지의 live 파싱은 제한적이며 snapshot으로 보완
+- 동적 도서관 페이지의 live 파싱은 제한적이며 정확히 운영시간 의도와 주제가 맞는 snapshot으로만 보완
 - 학생증 재발급 snapshot은 오래된 공식 안내이므로 `stale` 경고 표시
 - 정적 snapshot 갱신에는 코드 변경과 재배포가 필요
 - D1 영구 캐시·변경 감지·관리 화면·요청 횟수 제한 미구현
-- 규칙 사전에 없는 표현과 심한 오타는 분류하지 못할 수 있음
+- 오답 방지를 우선해 snapshot은 대표 질문 5개의 검증된 의도·주제로 제한하며, 규칙 사전에 없는 동의어·심한 오타는 snapshot 대신 `upstream_unavailable`이 될 수 있음
+- strict snapshot 규칙에 맞지 않아도 live 공식 원문을 정확히 확인하면 `verified_live`를 반환하며, live 실패 시에는 관련 없는 snapshot 대신 `upstream_unavailable`을 반환
 - 공식 사이트 HTML 구조 변경 시 parser/Allowlist 유지보수 필요
 - 이 프로젝트는 국립순천대학교 공식 서비스가 아닌 학생 프로젝트
 
@@ -225,10 +237,9 @@ pm2 logs webapp --nostream
 
 ### 제출 전
 
-1. 사용자의 명시적 허용 후 GitHub push
-2. 모바일 실제 기기에서 최종 레이아웃 확인
-3. 1분 데모 화면 녹화
-4. 제출 문서에 새 Production URL 반영
+1. 모바일 실제 기기에서 출처·상태·확인일이 포함된 실제 결과 카드 확인
+2. 동일 플랫폼이 아닌 독립 백업 경로 또는 1분 데모 영상 준비
+3. 제출 문서에 최종 Production URL과 `releaseId` 반영
 
 ### 제출 후
 
