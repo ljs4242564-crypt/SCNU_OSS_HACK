@@ -1,3 +1,4 @@
+import { acceptsEvidence, containsExcluded, evidenceUnits, matchesApplicationTerm, matchesScope } from './topicPolicy'
 import { DomUtils, ElementType, parseDocument } from 'htmlparser2'
 import type { AnyNode, Element } from 'domhandler'
 import type { QuestionAnalysis, SearchCandidate } from '../shared/api'
@@ -80,7 +81,8 @@ function collectContentLines(html: string) {
 
 function relevantLines(lines: string[], analysis: QuestionAnalysis) {
   const keywords = [...analysis.matchedKeywords, analysis.categoryLabel]
-  return lines
+  return lines.flatMap(evidenceUnits)
+    .filter((line) => acceptsEvidence(line, analysis))
     .map((line) => {
       let score = keywords.reduce((total, keyword) => total + (line.includes(keyword) ? 1 : 0), 0)
       if (analysis.intent === 'contact' && /(?:0\d{1,2}[-)]?\s*)?\d{3,4}[-)]\d{4}/.test(line)) score += 2
@@ -102,7 +104,8 @@ export function extractOfficialDocument(
   checkedAt: string,
 ): VerifiedDocument {
   const lines = collectContentLines(html)
-  const evidence = relevantLines(lines, analysis)
+  if (lines.length === 0) throw new Error('parse_error: no readable content blocks')
+  const evidence = relevantLines(lines, analysis).filter(line => matchesApplicationTerm(`${candidate.title} ${line}`, analysis))
   const content = cleanText(evidence.join('\n'))
   const extracted = extractStructuredInformation(content, analysis.context.year)
   const relevant = evidence.length > 0 && (
@@ -115,7 +118,7 @@ export function extractOfficialDocument(
   return {
     candidate,
     finalUrl,
-    title: candidate.title,
+    title: (containsExcluded(candidate.title, analysis) || !matchesScope(candidate.title, analysis)) ? `${analysis.positiveKeywords.join(' · ')} 공식 안내` : candidate.title,
     department: candidate.department,
     publishedAt: candidate.publishedAt,
     checkedAt,

@@ -52,7 +52,7 @@ const noSnapshotRepository: SnapshotRepository = {
   findBest: vi.fn(async () => null),
 }
 
-const failingSearch = vi.fn(async () => {
+const failingDocumentFetcher = vi.fn(async () => {
   throw new Error('http_error: upstream 502')
 })
 
@@ -76,7 +76,7 @@ describe('resolveAnswer', () => {
     const searcher = vi.fn(async () => completedSearch)
     const documentFetcher = vi.fn(async () => [document()])
 
-    await resolveAnswer(academicAnalysis(), {
+    await resolveAnswer(analyzeQuestion('도서관 운영시간 알려줘', now), {
       searcher,
       documentFetcher,
       snapshotRepository: noSnapshotRepository,
@@ -99,7 +99,8 @@ describe('resolveAnswer', () => {
 
   it('502 오류에서 유효 snapshot으로 전환한다', async () => {
     const result = await resolveAnswer(academicAnalysis(), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })
@@ -111,13 +112,16 @@ describe('resolveAnswer', () => {
   })
 
   it('timeout에서 snapshot으로 전환한다', async () => {
-    const searcher = vi.fn((_analysis: QuestionAnalysis, dependencies?: { signal?: AbortSignal }) =>
-      new Promise<SearchReport>((_resolve, reject) => {
-        dependencies?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-      }),
-    )
+    const documentFetcher = vi.fn((
+      _search: SearchReport,
+      _analysis: QuestionAnalysis,
+      _fetcher: typeof fetch,
+      signal?: AbortSignal,
+    ) => new Promise<VerifiedDocument[]>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
     const result = await resolveAnswer(academicAnalysis(), {
-      searcher,
+      documentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       timeoutMs: 5,
       now: () => now,
@@ -125,6 +129,34 @@ describe('resolveAnswer', () => {
 
     expect(result.status).toBe('verified_snapshot')
     expect(result.upstreamStatus).toBe('timeout')
+  })
+
+  it('production 기본 timeout에서 정확한 snapshot으로 전환한다', async () => {
+    vi.useFakeTimers()
+    try {
+      const documentFetcher = vi.fn((
+        _search: SearchReport,
+        _analysis: QuestionAnalysis,
+        _fetcher: typeof fetch,
+        signal?: AbortSignal,
+      ) => new Promise<VerifiedDocument[]>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      }))
+      const resultPromise = resolveAnswer(academicAnalysis(), {
+        documentFetcher,
+        snapshotRepository: new StaticSnapshotRepository(),
+        now: () => now,
+      })
+
+      await vi.advanceTimersByTimeAsync(2_500)
+      const result = await resultPromise
+
+      expect(result.status).toBe('verified_snapshot')
+      expect(result.answerMode).toBe('snapshot')
+      expect(result.upstreamStatus).toBe('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('파싱 오류에서 snapshot으로 전환한다', async () => {
@@ -142,7 +174,8 @@ describe('resolveAnswer', () => {
   it('만료 snapshot은 stale과 경고를 반환한다', async () => {
     const analysis = analyzeQuestion('국가장학금 신청 기간 알려줘', now)
     const result = await resolveAnswer(analysis, {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })
@@ -153,7 +186,8 @@ describe('resolveAnswer', () => {
 
   it('upstream 실패와 snapshot 없음은 upstream_unavailable이다', async () => {
     const result = await resolveAnswer(academicAnalysis(), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: noSnapshotRepository,
       now: () => now,
     })
@@ -193,7 +227,8 @@ describe('resolveAnswer', () => {
     '학사 관련 문의 전화번호 알려줘.',
   ])('대표 질문이 장애 시 설명 가능한 snapshot을 반환한다: %s', async (question) => {
     const result = await resolveAnswer(analyzeQuestion(question, now), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })
@@ -205,7 +240,8 @@ describe('resolveAnswer', () => {
 
   it('도서관 주말 snapshot은 운영·휴관 시설을 구분한다', async () => {
     const result = await resolveAnswer(analyzeQuestion('도서관은 주말에도 운영해?', now), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })
@@ -219,7 +255,8 @@ describe('resolveAnswer', () => {
 
   it('넓은 학사 문의 snapshot은 업무별 번호를 함께 안내한다', async () => {
     const result = await resolveAnswer(analyzeQuestion('학사 관련 문의 전화번호 알려줘.', now), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })
@@ -244,7 +281,32 @@ describe('resolveAnswer', () => {
     '성적 문의 전화번호 알려줘',
   ])('관련 없는 같은 카테고리 질문에는 snapshot을 반환하지 않는다: %s', async (question) => {
     const result = await resolveAnswer(analyzeQuestion(question, now), {
-      searcher: failingSearch,
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
+      snapshotRepository: new StaticSnapshotRepository(),
+      now: () => now,
+    })
+
+    expect(result.status).toBe('upstream_unavailable')
+    expect(result.answerMode).toBe('unavailable')
+    expect(result.cacheHit).toBe(false)
+    expect(result.sources).toEqual([])
+  })
+
+  it.each([
+    '2025학년도 1학기 중간고사 언제야?',
+    '다음 학기 중간고사 언제야?',
+    '이번 학기 중간고사 말고 기말고사 언제야?',
+    '2025학년도 1학기 국가장학금 신청 기간 알려줘',
+    '국가장학금 말고 외부장학금 신청 기간 알려줘',
+    '국가장학금 말고 봉사장학금 신청 기간 알려줘',
+    '도서관 예약 가능 시간 알려줘',
+    '주말 도서관 분실물 접수 시간 알려줘',
+    '학생증 재발급이 아니라 처음 발급받는 방법 알려줘',
+  ])('경계 질문에는 관련 없는 snapshot을 반환하지 않는다: %s', async (question) => {
+    const result = await resolveAnswer(analyzeQuestion(question, now), {
+      searcher: vi.fn(async () => completedSearch),
+      documentFetcher: failingDocumentFetcher,
       snapshotRepository: new StaticSnapshotRepository(),
       now: () => now,
     })

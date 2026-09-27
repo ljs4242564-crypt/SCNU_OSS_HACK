@@ -1,3 +1,5 @@
+import { koreanDate } from '../utils/koreanDate'
+import { acceptsEvidence } from './topicPolicy'
 import { URL_SECURITY_LIMITS } from '../config/domains'
 import type { QuestionAnalysis, SearchCandidate, SearchReport } from '../shared/api'
 import type { RequestContext, VerifiedDocument } from '../types/pipeline'
@@ -24,13 +26,14 @@ function normalizedTopic(value: string) {
 }
 
 function calendarMatches(event: CalendarEvent, analysis: QuestionAnalysis) {
+  if (!acceptsEvidence(event.schdulTitle ?? '', analysis)) return false
   const title = normalizedTopic(event.schdulTitle ?? '')
-  const yearMatches = event.bgnde?.startsWith(String(analysis.context.year))
+  const eventYear = Number(event.bgnde?.split('/')[0])
   const eventMonth = Number(event.bgnde?.split('/')[1] ?? '0')
+  const yearMatches = eventYear - (eventMonth < 3 ? 1 : 0) === analysis.context.year
   const eventSemester = eventMonth >= 3 && eventMonth <= 8 ? 1 : 2
-  const semesterMatches = title.includes(`제${analysis.context.semester}학기`)
-    || title.includes(`${analysis.context.semester}학기`)
-    || eventSemester === analysis.context.semester
+  const explicitSemester = title.match(/(?:제)?([12])학기/)?.[1]
+  const semesterMatches = (explicitSemester ? Number(explicitSemester) : eventSemester) === analysis.context.semester
   const specificKeywords = analysis.matchedKeywords.filter(
     (keyword) => !['학사일정', '학기', '일정', '시험'].includes(keyword),
   )
@@ -102,7 +105,7 @@ async function fetchAcademicCalendar(
         department: candidate.department,
         publishedAt: null,
         checkedAt,
-        content: event.schdulCn?.trim() || evidence,
+        content: evidence,
         evidence: [evidence],
         extracted,
         relevant: Boolean(startDate),
@@ -138,13 +141,11 @@ export async function fetchAndVerifyCandidates(
   context?: RequestContext,
 ): Promise<VerifiedDocument[]> {
   if (!analysis.supported || analysis.ambiguous) return []
-  const checkedAt = new Date().toISOString().slice(0, 10)
+  const checkedAt = koreanDate()
   const documents: VerifiedDocument[] = []
   const failures: unknown[] = []
-  let attemptedDocuments = 0
 
   if (analysis.category === 'academic' && analysis.intent === 'schedule') {
-    attemptedDocuments += 1
     const startedAt = Date.now()
     try {
       const calendarDocuments = await fetchAcademicCalendar(analysis, fetcher, checkedAt, signal, context)
@@ -170,7 +171,6 @@ export async function fetchAndVerifyCandidates(
   const remainingSlots = Math.max(0, 3 - documents.length)
   if (remainingSlots > 0) {
     const candidates = search.candidates.slice(0, remainingSlots)
-    attemptedDocuments += candidates.length
     const fetched = await Promise.allSettled(
       candidates.map((candidate) =>
         fetchHtmlDocument(candidate, analysis, fetcher, checkedAt, signal, context),
@@ -198,9 +198,7 @@ export async function fetchAndVerifyCandidates(
   }
 
   if (documents.length === 0 && failures.length > 0) throw failures[0]
-  if (documents.length === 0 && attemptedDocuments > 0) {
-    throw new Error('parse_error: 공식 원문에서 질문에 맞는 근거를 추출하지 못했습니다.')
-  }
+
 
   return documents.slice(0, 3)
 }

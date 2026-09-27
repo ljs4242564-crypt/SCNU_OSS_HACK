@@ -1,3 +1,4 @@
+import { acceptsEvidence, containsExcluded, matchesApplicationTerm } from './topicPolicy'
 import type { AnswerSource, QuestionAnalysis, SearchReport } from '../shared/api'
 import type { PipelineResult, VerifiedDocument } from '../types/pipeline'
 
@@ -79,7 +80,12 @@ export function formatRuleBasedAnswer(
   search: SearchReport,
   documents: VerifiedDocument[],
 ): PipelineResult & { sources: AnswerSource[] } {
-  const relevantDocuments = documents.filter((document) => document.relevant)
+  const relevantDocuments = documents.filter((document) => document.relevant
+    && acceptsEvidence(document.evidence[0] || document.content, analysis)
+    && document.evidence.every(unit => acceptsEvidence(unit, analysis))
+    && matchesApplicationTerm(`${document.title} ${document.content}`, analysis)
+    && !containsExcluded([document.title, document.content, ...document.evidence,
+      ...document.extracted.locations].join(' '), analysis))
 
   if (!analysis.supported || analysis.ambiguous || relevantDocuments.length === 0) {
     return {

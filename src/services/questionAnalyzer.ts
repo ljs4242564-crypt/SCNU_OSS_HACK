@@ -1,3 +1,4 @@
+import { koreanAcademicTerm } from '../utils/koreanDate'
 import {
   CATEGORY_RULES,
   INTENT_LABELS,
@@ -10,6 +11,7 @@ import { normalizeQuestion } from '../utils/textNormalizer'
 
 const MIN_SUPPORTED_SCORE = 4
 const AMBIGUITY_SCORE_DIFFERENCE = 2
+const EXCLUSION_MARKERS = ['말고', '아니라', '제외', '빼고'] as const
 
 const INTENT_SEARCH_TERMS: Partial<Record<QuestionIntent, string>> = {
   schedule: '일정',
@@ -95,18 +97,15 @@ function inferAcademicContext(question: string, now: Date) {
     : question.includes('두 번째 학기') || question.includes('2학기')
       ? 2
       : null
+  const currentTerm = koreanAcademicTerm(now)
 
-  const currentYear = now.getUTCFullYear()
-  const currentMonth = now.getUTCMonth() + 1
-  const currentSemester: 1 | 2 = currentMonth >= 3 && currentMonth <= 8 ? 1 : 2
-
-  let year = explicitYear ? Number(explicitYear[1]) : currentYear
+  let year = explicitYear ? Number(explicitYear[1]) : currentTerm.year
   let semester = (explicitSemester ? Number(explicitSemester[1]) : koreanSemester) as 1 | 2 | null
   let semesterWasExplicit = Boolean(explicitSemester || koreanSemester)
 
   if (!semester && question.includes('다음 학기')) {
     semesterWasExplicit = true
-    if (currentSemester === 1) {
+    if (currentTerm.semester === 1) {
       semester = 2
     } else {
       semester = 1
@@ -116,7 +115,7 @@ function inferAcademicContext(question: string, now: Date) {
 
   if (!semester && (question.includes('지난 학기') || question.includes('이전 학기'))) {
     semesterWasExplicit = true
-    if (currentSemester === 2) {
+    if (currentTerm.semester === 2) {
       semester = 1
     } else {
       semester = 2
@@ -126,10 +125,33 @@ function inferAcademicContext(question: string, now: Date) {
 
   return {
     year,
-    semester: semester ?? currentSemester,
+    semester: semester ?? currentTerm.semester,
     yearWasExplicit: Boolean(explicitYear),
     semesterWasExplicit,
   } as const
+}
+
+function detectExcludedKeywords(question: string) {
+  const lowerQuestion = question.toLocaleLowerCase('ko-KR')
+  const excluded = new Set<string>()
+
+  for (const marker of EXCLUSION_MARKERS) {
+    let markerIndex = lowerQuestion.indexOf(marker)
+    while (markerIndex >= 0) {
+      const beforeMarker = lowerQuestion.slice(0, markerIndex).trimEnd()
+      for (const rule of CATEGORY_RULES) {
+        for (const keyword of [...rule.strongKeywords, ...rule.relatedKeywords]) {
+          const normalizedKeyword = keyword.toLocaleLowerCase('ko-KR')
+          if (['', '이', '가', '은', '는', '을', '를'].some(
+            (particle) => beforeMarker.endsWith(`${normalizedKeyword}${particle}`),
+          )) excluded.add(keyword)
+        }
+      }
+      markerIndex = lowerQuestion.indexOf(marker, markerIndex + marker.length)
+    }
+  }
+
+  return [...excluded].filter((term) => ![...excluded].some((longer) => longer !== term && longer.includes(term)))
 }
 
 function buildSearchKeywords(
@@ -151,15 +173,27 @@ function buildSearchKeywords(
 
 export function analyzeQuestion(rawQuestion: string, now = new Date()): QuestionAnalysis {
   const question = normalizeQuestion(rawQuestion)
-  const ranked = rankCategories(question)
+  const hasDayExclusion = /(주말|평일)(?:\s*(?:운영|이용)시간)?\s*(?:말고|아니라|제외|빼고)/.test(question)
+  const excludedKeywords = detectExcludedKeywords(question).filter(term => !hasDayExclusion || !['운영시간', '이용시간'].includes(term))
+  for (const match of question.matchAll(/(주말|평일)(?:\s*(?:운영|이용)시간)?\s*(?:말고|아니라|제외|빼고)/g)) {
+    if (!excludedKeywords.includes(match[1])) excludedKeywords.push(match[1])
+  }
+  // Remove only the explicitly negated occurrence, preserving shared context and later positive mentions.
+  let positiveQuestion = question
+  for (const keyword of excludedKeywords) {
+    positiveQuestion = positiveQuestion.replace(new RegExp(`${keyword}(?:이|가|은|는|을|를)?\\s*(?:말고|아니라|제외|빼고)`, 'g'), ' ')
+  }
+  positiveQuestion = positiveQuestion.replace(/(주말|평일)(?:\s*(?:운영|이용)시간)?\s*(?:말고|아니라|제외|빼고)/g, ' ')
+  const ranked = rankCategories(positiveQuestion)
   const top = ranked[0]
   const second = ranked[1]
   const supported = Boolean(top && top.score >= MIN_SUPPORTED_SCORE)
   const category: QuestionCategory = supported ? top.rule.id : 'unknown'
   const categoryLabel = supported ? top.rule.label : '지원하지 않는 질문'
-  const intent = detectIntent(question, category)
+  const intent = detectIntent(positiveQuestion, category)
   const context = inferAcademicContext(question, now)
-  const ambiguous = Boolean(
+  const scholarshipTopics = ['국가장학금', '주거안정장학금', '교내장학금', '근로장학금', '외부장학금', '교외장학금', '봉사장학금']
+  const ambiguous = scholarshipTopics.filter(t => positiveQuestion.includes(t)).length > 1 || Boolean(
     supported
       && second
       && second.score >= MIN_SUPPORTED_SCORE
@@ -168,6 +202,9 @@ export function analyzeQuestion(rawQuestion: string, now = new Date()): Question
   const matchedKeywords = supported
     ? unique([...top.strongMatches, ...top.relatedMatches])
     : []
+  const neutralKeywords = matchedKeywords.filter((term) => ['학기', '일정', '시험', '신청기간', '발급'].includes(term))
+  let positiveKeywords = matchedKeywords.filter((term) => !neutralKeywords.includes(term))
+  if (/처음\s*발급|최초\s*발급|신규\s*발급/.test(positiveQuestion)) positiveKeywords = ['최초 발급']
   const searchKeywords = supported
     ? buildSearchKeywords(top.rule, intent, matchedKeywords, context)
     : []
@@ -181,6 +218,11 @@ export function analyzeQuestion(rawQuestion: string, now = new Date()): Question
   }
 
   return {
+    normalizedQuestion: question,
+    excludedKeywords,
+    positiveKeywords,
+    neutralKeywords,
+    positiveQuestion,
     category,
     categoryLabel,
     intent,

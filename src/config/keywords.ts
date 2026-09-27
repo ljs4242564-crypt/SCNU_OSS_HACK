@@ -31,7 +31,7 @@ export const CATEGORY_RULES: CategoryRule[] = [
     id: 'scholarship',
     label: '장학금',
     strongKeywords: [
-      '장학금', '장학', '국가장학금', '교내장학금', '교외장학금', '근로장학', '학자금대출',
+      '장학금', '장학', '국가장학금', '교내장학금', '교외장학금', '외부장학금', '봉사장학금', '근로장학', '학자금대출',
     ],
     relatedKeywords: ['선발', '지급', '소득분위', '한국장학재단', '생활비대출', '등록금지원'],
     searchTerms: ['장학금', '장학 안내'],

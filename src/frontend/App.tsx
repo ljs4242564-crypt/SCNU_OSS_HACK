@@ -49,7 +49,7 @@ const quickQuestions: QuickQuestion[] = [
   },
   {
     label: '도서관',
-    question: '도서관 운영시간을 알려줘',
+    question: '도서관 주말 운영시간을 알려줘',
     description: '운영시간 · 이용 안내',
     icon: Library,
     tone: 'amber',

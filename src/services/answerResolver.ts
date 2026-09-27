@@ -1,3 +1,4 @@
+import { snapshotCheckDate } from '../utils/koreanDate'
 import type { VerifiedSnapshot } from '../data/verifiedSnapshots'
 import type {
   AnswerSource,
@@ -62,7 +63,7 @@ function snapshotSource(snapshot: VerifiedSnapshot): AnswerSource {
     department: snapshot.department,
     url: snapshot.sourceUrl,
     publishedAt: null,
-    checkedAt: snapshot.verifiedAt,
+    checkedAt: snapshotCheckDate(snapshot.verifiedAt),
   }
 }
 
@@ -79,14 +80,14 @@ function snapshotAnswer(snapshot: VerifiedSnapshot, now: Date, upstreamStatus: U
     fields: [
       ...snapshot.fields,
       { label: '확인 방식', value: stale ? '오래된 마지막 검증본' : '사전 검증 자료' },
-      { label: '마지막 확인일', value: snapshot.verifiedAt.replaceAll('-', '.') },
+      { label: '마지막 확인일', value: snapshotCheckDate(snapshot.verifiedAt).replaceAll('-', '.') },
     ],
     sources: [snapshotSource(snapshot)],
     search: emptySearch('failed'),
     answerMode: 'snapshot',
     upstreamStatus,
     cacheHit: true,
-    lastSuccessfulCheck: snapshot.verifiedAt,
+    lastSuccessfulCheck: snapshotCheckDate(snapshot.verifiedAt),
   }
 }
 
@@ -97,6 +98,19 @@ async function runLivePipeline(
 ): Promise<{ search: SearchReport; documents: VerifiedDocument[] }> {
   const searcher = dependencies.searcher ?? searchOfficialSources
   const documentFetcher = dependencies.documentFetcher ?? fetchAndVerifyCandidates
+
+  if (analysis.category === 'academic' && analysis.intent === 'schedule') {
+    const search = emptySearch('completed')
+    const documents = await documentFetcher(
+      search,
+      analysis,
+      dependencies.fetcher ?? fetch,
+      signal,
+      dependencies.context,
+    )
+    return { search, documents }
+  }
+
   const search = await searcher(analysis, {
     fetcher: dependencies.fetcher,
     signal,
@@ -177,7 +191,7 @@ export async function resolveAnswer(
   }
 
   const repository = dependencies.snapshotRepository ?? staticSnapshotRepository
-  const snapshot = await repository.findBest(analysis)
+  const snapshot = await repository.findBest(analysis, analysis.normalizedQuestion)
   if (snapshot) return snapshotAnswer(snapshot, dependencies.now?.() ?? new Date(), upstreamStatus)
 
   return {

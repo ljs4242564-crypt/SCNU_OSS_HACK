@@ -95,3 +95,16 @@
 - 자동 테스트: 로컬 테스트는 upstream 장애에서 snapshot/unavailable 전환을 검증한다. 호스팅 계층은 배포 후 curl 기반 smoke test로 별도 검증하며, 하나라도 실패하면 배포 완료로 판정하지 않는다.
 - 수정 전후 결과: 이전 점검에서는 루트와 Health가 HTTP 200 HTML `Site Unavailable`, Chat이 405였다. 2026-09-26 22:38 KST에는 기존 URL이 복구되었지만 오매칭이 계속 재현되었다. 2026-09-26 23:02 KST 새 관리형 배포에서는 앱 HTML, Health JSON, Chat JSON과 `releaseId: 2026-09-26-corrective-1`을 확인했고, 도서관 대출·위치 질문은 관련 없는 snapshot 없이 `upstream_unavailable`을 반환했다.
 - 남은 한계: 같은 Genspark 플랫폼의 이전 URL은 독립 장애 격리가 되지 않는다. 현재 독립 백업 URL과 1분 데모 영상은 준비되지 않았으며 제출 전 별도로 마련해야 한다.
+
+
+## 2026-09-27 최종 검토: 범위 오매칭과 상태 교정
+
+앞부분은 과거 실행 기록이다. 현재 결과는 SUBMISSION_STATUS.md를 우선한다.
+
+새 finalScope.test.ts 초기 15개 중 8개 실패를 재현했다. S1~S4는 평일/주말, 제외 표현, 1차/2차, 복수 장학금 문제이고 L1~L3는 HTTP 200에서도 학기·절차·요일이 다른 근거를 반환하는 문제다. 실제 학교가 오답을 보냈다는 주장이 아니라 독립 fixture 검증이다.
+
+공통 topicPolicy에 범위 계약을 추가하고 snapshot에 차수 메타데이터와 주말 필수 조건을 적용했다. live 문장별 필터와 최종 formatter 검증으로 답변·필드·출처를 통제한다. 장학금 기간은 적용 학년도와 학기가 있어야 하며 게시일만으로 확정하지 않는다. 1~2월 일정 적용 학년도도 이전 연도로 맞췄다.
+
+기존 성공 HTTP 제외 자료 테스트 4개의 기대값은 upstream_unavailable에서 정확한 not_found로 변경했다. 단언을 삭제하거나 허용 상태 목록을 넓히지 않았으며 upstreamStatus=ok와 빈 sources를 추가 검증했다. Worker 정상 장학금 fixture에는 적용 학기 근거를 추가하고 성공 단언은 유지했다. 기본 127개와 새 19개, 총 146개 통과.
+
+대체 타입 검사에서 새 tuple 추론 오류 1개를 실제 수정 후 통과했다. 기본 타입 실행기 panic, live timeout, Wrangler preview 오류는 실패 그대로 기록한다. React/Hono 구조와 보안 경계는 유지했다. 도서관 홈 빠른 질문은 주말로 수정하고 PM2 cwd를 __dirname으로 이식 가능하게 했다.
