@@ -1,3 +1,4 @@
+import { containsExcluded, matchesPositive } from './topicPolicy'
 import {
   OFFICIAL_SEARCH_SOURCES,
   SEARCH_LIMITS,
@@ -41,7 +42,7 @@ function selectSources(analysis: QuestionAnalysis) {
 }
 
 function buildSearchTerms(analysis: QuestionAnalysis) {
-  const primaryTerm = analysis.matchedKeywords
+  const primaryTerm = analysis.positiveKeywords
     .filter((keyword) => !['학기', '일정', '신청', '문의', '전화'].includes(keyword))
     .sort((left, right) => right.length - left.length)[0]
     ?? analysis.categoryLabel
@@ -51,6 +52,9 @@ function buildSearchTerms(analysis: QuestionAnalysis) {
 }
 
 function scoreCandidate(item: ParsedBoardItem, analysis: QuestionAnalysis) {
+  if (containsExcluded(item.title, analysis) && !matchesPositive(item.title, analysis)) {
+    return { score: -1, matchedKeywords: [] }
+  }
   const searchableText = `${item.title} ${item.department ?? ''}`
   const matchedKeywords = analysis.searchKeywords.filter((keyword) => includesKeyword(searchableText, keyword))
   const coreKeywords = analysis.matchedKeywords.filter(

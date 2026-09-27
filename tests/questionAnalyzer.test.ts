@@ -101,4 +101,30 @@ describe('analyzeQuestion', () => {
     expect(result.supported).toBe(false)
     expect(result.searchKeywords).toEqual([])
   })
+
+  it.each([
+    ['2026-02-28T14:59:59.000Z', 2025, 2],
+    ['2026-02-28T15:00:00.000Z', 2026, 1],
+    ['2026-08-31T14:59:59.000Z', 2026, 1],
+    ['2026-08-31T15:00:00.000Z', 2026, 2],
+    ['2026-12-31T14:59:59.000Z', 2026, 2],
+    ['2026-12-31T15:00:00.000Z', 2026, 2],
+    ['2027-02-28T14:59:59.000Z', 2026, 2],
+    ['2027-02-28T15:00:00.000Z', 2027, 1],
+  ] as const)('KST 기준 시각 %s의 학년도·학기를 계산한다', (iso, year, semester) => {
+    const result = analyzeQuestion('학사일정 알려줘', new Date(iso))
+
+    expect(result.context.year).toBe(year)
+    expect(result.context.semester).toBe(semester)
+  })
+
+  it.each([
+    ['이번 학기 중간고사 말고 기말고사 언제야?', '중간고사'],
+    ['국가장학금 말고 외부장학금 신청 기간 알려줘', '국가장학금'],
+    ['학생증 재발급이 아니라 처음 발급받는 방법 알려줘', '재발급'],
+  ])('제외 표현 앞의 경쟁 주제를 식별한다: %s', (question, excludedKeyword) => {
+    const result = analyzeQuestion(question, secondSemester)
+
+    expect(result.excludedKeywords).toContain(excludedKeyword)
+  })
 })

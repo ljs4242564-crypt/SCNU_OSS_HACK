@@ -40,6 +40,11 @@ export type QuestionIntent =
   | 'general'
 
 export type QuestionAnalysis = {
+  normalizedQuestion: string
+  excludedKeywords: string[]
+  positiveKeywords: string[]
+  neutralKeywords: string[]
+  positiveQuestion: string
   category: QuestionCategory
   categoryLabel: string
   intent: QuestionIntent
@@ -144,6 +149,7 @@ export type HealthResponse = {
   service: 'SCNU Campus Assistant API'
   appVersion: string
   releaseId: string
+  commitSha: string
   builtAt: string
   timestamp: string
 }

@@ -25,8 +25,10 @@ describe('security headers', () => {
     expect(body).toMatchObject({
       status: 'ok',
       appVersion: '1.1.0',
-      releaseId: '2026-09-26-corrective-1',
+      releaseId: 'local-development',
+      commitSha: 'local-development',
+      builtAt: 'local-development',
     })
-    expect(body.builtAt).toMatch(/^2026-09-26T/)
+    expect(body.timestamp).toEqual(expect.any(String))
   })
 })

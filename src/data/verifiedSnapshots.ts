@@ -10,6 +10,11 @@ export type SnapshotMatchRule = {
 export type VerifiedSnapshot = {
   id: string
   category: QuestionCategory
+  academicTerm?: {
+    year: number
+    semester: 1 | 2
+  }
+  applicationRound?: 1 | 2
   match: SnapshotMatchRule
   title: string
   content: string
@@ -27,9 +32,11 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   {
     id: 'academic-midterm-2026-2',
     category: 'academic',
+    academicTerm: { year: 2026, semester: 2 },
     match: {
       intents: ['schedule'],
       requiredAny: ['중간고사', '중간시험'],
+      excluded: ['기말고사', '기말시험'],
     },
     title: '2026학년도 제2학기 중간시험',
     content: '국립순천대학교 학사일정에서 제2학기 중간시험은 2026년 10월 19일부터 10월 23일까지로 확인되었습니다.',
@@ -45,11 +52,16 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
   },
   {
     id: 'scholarship-national-2026-2-second',
+    applicationRound: 2,
     category: 'scholarship',
+    academicTerm: { year: 2026, semester: 2 },
     match: {
       intents: ['application'],
       requiredAll: ['국가장학금'],
-      excluded: ['교내장학금', '근로장학금', '근로장학', '교외장학금', '외부장학금'],
+      excluded: [
+        '교내장학금', '근로장학금', '근로장학', '교외장학금', '외부장학금',
+        '봉사장학금', '봉사장학', '주거안정장학금',
+      ],
     },
     title: '2026학년도 2학기 국가장학금 2차 신청 안내',
     content: '2차 신청 기간은 2026년 8월 12일 09:00부터 9월 9일 18:00까지였습니다. 현재는 안내된 신청 기간이 지났으므로 새 공지를 확인해야 합니다.',
@@ -68,8 +80,8 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
     category: 'library',
     match: {
       intents: ['hours'],
-      requiredAny: ['운영시간', '이용시간', '주말', '열람실', '개관', '휴관', '몇 시', '몇시'],
-      excluded: ['위치', '대출', '반납', '예약', '좌석', '분실'],
+      requiredAll: ['주말'],
+      excluded: ['위치', '대출', '반납', '예약', '좌석', '분실', '분실물'],
     },
     title: '국립순천대학교 도서관 주말 시설 이용시간',
     content: '주말에는 일부 시설만 운영합니다. 자료관은 주말 및 법정공휴일에 휴관하고, 학습관 1층·3층 일부 시설도 주말에 휴관합니다. 학습관 2층 201·202 열람실과 We 라운지, 학습관 4층 401·402 열람실과 개인캐럴은 06:00~24:00 연중무휴로 안내되어 있습니다.',
@@ -91,6 +103,7 @@ export const VERIFIED_SNAPSHOTS: VerifiedSnapshot[] = [
     match: {
       intents: ['procedure'],
       requiredAll: ['학생증', '재발급'],
+      excluded: ['처음 발급', '신규 발급', '최초 발급'],
     },
     title: '학생증 재발급 마지막 확인 자료',
     content: '공식 학생증 안내에는 일반 학생증 재발급 수수료 3천 원, 교통카드·현금입출납 기능이 있는 IC 학생증은 카드 구입 수수료 5천 원으로 구분되어 있습니다. 이 snapshot의 기준 안내는 오래되었으므로 방문 전 학생지원과에 최신 절차와 비용을 다시 확인하세요.',
